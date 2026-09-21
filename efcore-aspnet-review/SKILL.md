@@ -35,3 +35,17 @@ Create a throwaway console project (in the scratchpad, not the repo) that refere
 ## Also
 
 Ordering by a column with `GetAllOrderByDescending(Expression<Func<T, DateTime>>)` accepts only non-nullable `DateTime`; a nullable date column will not compile. `sqlcmd` reads the data and schema you need without EF (`sys.foreign_keys`, `sys.default_constraints`, `sys.columns`).
+
+## Find entity/column mismatches before they become runtime 500s
+
+An entity can compile, pass its tests and still fail every query because EF selects a column the table does not have (`Invalid column name 'X'`). Three real ones, found in one pass:
+
+- an **enum-typed property** next to its `...Id` int (`ResponseType` beside `ResponseTypeId`) — EF maps it as a column;
+- a **base-class property** whose column has another name (`BaseNameActiveEntity.Name` vs a table column `UserName`);
+- a **typo in the database** (`RequestExpenseSheetd`) where the property is `RequestExpenseSheetId`.
+
+How to check: in the model-dump harness, print `table|column` for every property (`et.GetProperties()`, `p.GetColumnName(StoreObjectIdentifier.Table(et.GetTableName()!, et.GetSchema()))`), dump the real `sys.tables`/`sys.columns` with `sqlcmd -h -1 -W -s "|"`, strip `\r`, and diff them with `awk` (case-insensitive; `comm` misorders names with underscores). Then confirm at runtime with read-only GETs of every route (any 500 shows the SQL error in the API log). Keyless stored-procedure result types (`DeleteTableResult`) legitimately have no table.
+
+Fixes that leave the database alone: an enum view of an id becomes `[NotMapped] public MyEnum X => (MyEnum)XId;` (getter only, so JSON no longer demands it); a differently-named column is mapped in `OnModelCreating` with `modelBuilder.Entity<T>().Property(e => e.P).HasColumnName("Real")` (put a comment saying to remove it if the column is renamed).
+
+Also: `await` the `spCanDelete`-style helper instead of `.Result`; and when a UI adds or edits a row, set the related object (`row.employee = list.find(...)`) because the API returns the row without its navigation properties, so a grid column showing `row.employee?.name` stays blank until a reload.
