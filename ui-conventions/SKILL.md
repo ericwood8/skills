@@ -1,6 +1,6 @@
 ---
 name: ui-conventions
-description: Personal desktop-dialog and toolbar UX conventions — keyboard access keys with conflict checking, Escape/Enter behavior, default-button focus, first-control focus on toolbars, and tooltips on every toolbar button. Framework-agnostic (applies to WPF, WinUI3, WinForms, or any desktop UI); see the winui3 skill for WinUI3-specific implementation techniques. Use when building or reviewing any dialog, form, or toolbar/menu bar in a desktop app.
+description: Personal desktop-dialog and toolbar UX conventions — keyboard access keys with conflict checking, Escape/Enter behavior, default-button focus, first-control focus on toolbars, tooltips on every toolbar button, and colorblind-safe status icons (shape-coded, not just color-coded) for success/warning/error messages. Framework-agnostic (applies to WPF, WinUI3, WinForms, or any desktop UI); see the winui3 skill for WinUI3-specific implementation techniques. Use when building or reviewing any dialog, form, toolbar/menu bar, or status/result message in a desktop app.
 ---
 
 # Desktop UI conventions
@@ -60,3 +60,24 @@ click into the toolbar. Do this once, when the toolbar first loads.
 Every button on a top-level toolbar/command bar should have a tooltip explaining what it does — standard
 practice, not optional polish. Include the access key in the tooltip text (e.g. "Connect to a SQL Server
 database (Alt+C)") so the keyboard shortcut is discoverable without needing to hold Alt first.
+
+## 6. Status icons: shape-coded, not just color-coded
+
+Any success/warning/error message — a result popup, an inline validation message, a status bar entry —
+gets an icon whose *shape* carries the meaning, not just its color. Color alone (a green dot vs. an amber
+dot vs. a red dot) is unreliable for colorblind users (protanopia/deuteranopia make red/green/amber hard to
+tell apart at a glance) and is the reason this convention exists at all — it's the same fix
+[microsoft/skills#398](https://github.com/microsoft/skills/pull/398) made to a review-output legend, applied
+here to actual app UI instead of markdown text.
+
+| Meaning | Shape | Color | Asset |
+| --- | --- | --- | --- |
+| Pass / success / yes | Rounded square + checkmark | Green | [assets/status-success.svg](assets/status-success.svg) |
+| Needs attention / warning / caution | Triangle + `!` | Amber/yellow | [assets/status-warning.svg](assets/status-warning.svg) |
+| Blocking issue / error / no | Circle + X, on a light/white background | Red | [assets/status-error.svg](assets/status-error.svg) |
+
+These three SVGs are simple, flat, single-color icons deliberately kept easy to re-theme (swap the fill/
+stroke colors) or redraw at a different size — they're a starting point, not a locked design. See the
+winui3 skill for how to wire this into an actual WinUI3 dialog (prefer the built-in `InfoBar` control's
+`Severity` property over loading these as custom images when the framework already gives you this for
+free).

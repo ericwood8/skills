@@ -1,6 +1,6 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction and reach-in techniques (access keys, default-button focus), BitmapIcon vs ImageIcon, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, and driving a WinUI3 app externally with UI Automation for verification. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction and reach-in techniques (access keys, default-button focus), BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, and driving a WinUI3 app externally with UI Automation for verification. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
 ---
 
 # WinUI3 (Windows App SDK) gotchas
@@ -85,6 +85,42 @@ backing file/Uri at all), `<BitmapIcon UriSource="...">` won't work — its `Uri
 image was never constructed from a URI. Use `<ImageIcon Source="{x:Bind SomeBitmapImage}">` instead;
 `ImageIcon.Source` is a plain `ImageSource` and works with any already-constructed `BitmapImage`,
 regardless of how its pixels were loaded.
+
+## Showing success/warning/error status icons (shape-coded, not just color-coded)
+
+See the ui-conventions skill for the general convention (green check / amber triangle+`!` / red circle+X,
+distinguished by shape so it doesn't rely on color alone) and its bundled `assets/status-*.svg` icons.
+Two ways to actually show it in WinUI3, in order of preference:
+
+**Prefer the built-in `InfoBar` control first.** It already has a `Severity` property
+(`Success`/`Warning`/`Error`/`Informational`) that renders the correct shape-coded, theme-aware,
+accessible icon with zero custom assets:
+```xml
+<InfoBar IsOpen="{x:Bind ViewModel.HasResult, Mode=OneWay}"
+         Severity="{x:Bind ViewModel.ResultSeverity, Mode=OneWay}"
+         Title="{x:Bind ViewModel.ResultTitle, Mode=OneWay}"
+         Message="{x:Bind ViewModel.ResultMessage, Mode=OneWay}" />
+```
+For a modal popup like a "Template generation failed:" dialog, put the `InfoBar` *inside* the
+`ContentDialog`'s content instead of building a custom icon+text header — this keeps the existing modal
+button flow (OK/Retry/Cancel) while getting the icon for free. For a non-blocking result (most "it worked" /
+"here's a warning" cases don't actually need to be modal), consider dropping `ContentDialog` entirely and
+showing the `InfoBar` inline in the window — fewer clicks, same information.
+
+**Use the bundled SVG assets directly only when `InfoBar`'s built-in styling doesn't fit** (e.g. a custom
+non-InfoBar layout that still needs the icon). WinUI3 can load an SVG straight from disk via
+`SvgImageSource` + `Image` (or wrap it in `ImageIcon`, per the `BitmapIcon`-vs-`ImageIcon` note above —
+`ImageIcon.Source` accepts any `ImageSource`, and `SvgImageSource` is one):
+```xml
+<ImageIcon Width="20" Height="20">
+    <ImageIcon.Source>
+        <SvgImageSource UriSource="ms-appx:///Assets/status-error.svg" />
+    </ImageIcon.Source>
+</ImageIcon>
+```
+(Copy the relevant `assets/status-*.svg` file from the ui-conventions skill into the project's own `Assets/`
+folder as `Content`/`Resource`, since `ms-appx:///` resolves against the app package, not the skill
+directory.)
 
 ## `Windows.Storage.Pickers.FolderPicker` can't open at a specific starting directory
 
