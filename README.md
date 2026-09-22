@@ -13,7 +13,7 @@ This repo is the version-controlled source of truth. Claude Code actually loads 
 
 | Skill | What it covers |
 | --- | --- |
-| [csharp](csharp) | Personal C# conventions — per-project `GlobalUsings.cs`, defaulting to modern C#/.NET syntax unless pinned to .NET Framework, single well-named boolean expressions over scattered conditionals |
+| [csharp](csharp) | Personal C# conventions — per-project `GlobalUsings.cs`, defaulting to modern C#/.NET syntax unless pinned to .NET Framework, single well-named boolean expressions, `required`/`init` over mutable setters, records for DTOs, propagating `CancellationToken` through async chains |
 | [winui3](winui3) | WinUI3/Windows App SDK gotchas — MVVM Toolkit partial-property build failures, TreeView binding limits, ContentDialog's single-open restriction, BitmapIcon vs ImageIcon, status icons via InfoBar, UI Automation-driven verification |
 | [ui-conventions](ui-conventions) | Framework-agnostic desktop dialog/toolbar UX conventions — access keys, Escape/Enter, default-button focus, toolbar tooltips, colorblind-safe status icons |
 | [msbuild](msbuild) | MSBuild/.csproj gotchas — XML-comment double-hyphen trap, culture-code false positives, RuntimeIdentifier singular-vs-plural, `.slnx` vs `.sln` |

@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: Personal C# coding conventions - a project-root GlobalUsings.cs for namespaces common across that project, defaulting to modern C# 14/.NET 10 syntax unless the project is pinned to .NET Framework/Desktop, and preferring a single well-named boolean expression over scattered conditional logic. Use when writing or reviewing C# code, scaffolding a new .csproj, or deciding how to express a conditional/boolean check.
+description: Personal C# coding conventions - a project-root GlobalUsings.cs for namespaces common across that project, defaulting to modern C# 14/.NET 10 syntax unless the project is pinned to .NET Framework/Desktop, preferring a single well-named boolean expression over scattered conditional logic, required/init properties over mutable setters, records for DTOs, and propagating CancellationToken through async call chains. Use when writing or reviewing C# code, scaffolding a new .csproj, designing a data model or DTO, writing an async method, or deciding how to express a conditional/boolean check.
 ---
 
 # C# Conventions
@@ -35,3 +35,40 @@ bool isEligibleForDiscount = user is { Age: > 65, IsPremiumMember: true };
 ```
 
 Property patterns (`is { Prop: condition, ... }`) are usually the clearest option once a check involves more than one property off the same object — reach for them over a chain of `&&`-joined property accesses. The point is readability, not literally minimizing line count — if collapsing a check into one expression makes it *harder* to read (too many clauses, mixed precedence that needs parentheses to untangle), it's fine to split it back into a couple of named intermediate booleans instead.
+
+## Object construction: `required`/`init` over mutable setters
+
+When a type has properties that must be set at construction and shouldn't change afterward, use `required` + `init` instead of a mutable auto-property or a constructor overload juggling optional parameters — the compiler then enforces that every required value is actually supplied, and the object can't drift out of a valid state after creation:
+
+```csharp
+public class User
+{
+    public required string Email { get; init; }
+    public required Guid TenantId { get; init; }
+}
+```
+
+This is about construction-time safety, not a blanket "make everything immutable" rule — a type that legitimately needs to mutate after creation (a view model tracking UI-editable state, an entity EF Core updates) should keep ordinary settable properties.
+
+## Records for DTOs
+
+Default to `record` (or `record struct` for small, frequently-allocated ones) for types that exist purely to carry data — API request/response shapes, EF Core projection targets, message payloads — rather than a plain `class`. Value-based equality and a concise positional-or-init syntax come for free, and there's rarely a reason a DTO needs reference identity or mutability:
+
+```csharp
+public record UserSummary(Guid Id, string Email, DateTimeOffset CreatedAt);
+```
+
+Keep using a plain `class` for anything with actual behavior (methods that do real work, EF Core entities that need identity semantics tied to a database key, not just structural equality) — the point is picking the type that matches what the type *is*, not defaulting to `record` everywhere.
+
+## Propagate `CancellationToken` through async call chains
+
+An async method that calls other async methods should accept a `CancellationToken` parameter and pass it down the chain, not swallow it at the top or omit it because "it's just an internal helper":
+
+```csharp
+public async Task<User> GetUserAsync(Guid id, CancellationToken cancellationToken)
+{
+    return await _dbContext.Users.FirstAsync(u => u.Id == id, cancellationToken);
+}
+```
+
+This is easy to forget because the code compiles fine without it — a dropped token doesn't cause an error, it just means a caller's cancellation (request aborted, timeout, user navigated away) silently stops propagating partway down the stack and the expensive operation keeps running anyway. Default to threading it through; the exception is a genuinely fire-and-forget background operation that's supposed to outlive the caller's request.
