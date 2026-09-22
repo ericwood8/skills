@@ -5,7 +5,7 @@ learned across real projects, not generic advice. Each skill is a `SKILL.md` (pl
 scripts/references/assets) that Claude Code loads automatically when its description matches the task at hand.
 
 This repo is the version-controlled source of truth. Claude Code actually loads skills from
-`C:\Users\ericw\.claude\skills\<skill-name>\` — a new or edited skill gets copied to both locations.
+`C:\Users\<UserName>\.claude\skills\<skill-name>\` — a new or edited skill gets copied to both locations.
 
 ## Skills
 
@@ -62,5 +62,5 @@ This repo is the version-controlled source of truth. Claude Code actually loads 
 ## Adding or updating a skill
 
 1. Write/edit `<skill-name>/SKILL.md` here.
-2. Copy the same skill folder to `C:\Users\ericw\.claude\skills\<skill-name>\` so Claude Code actually picks it up.
+2. Copy the same skill folder to `C:\Users\<UserName>\.claude\skills\<skill-name>\` so Claude Code actually picks it up.
 3. Update this README's table.
