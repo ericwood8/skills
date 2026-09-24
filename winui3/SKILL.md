@@ -5,6 +5,14 @@ description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns lear
 
 # WinUI3 (Windows App SDK) gotchas
 
+## Writing a `.xaml` comment? See the msbuild skill's double-hyphen trap first
+
+`.xaml` files are strict XML, so a `<!-- ... -->` comment containing `--` (a natural em-dash writing
+habit) fails the XAML compiler at build time (`WMC9997`/`WMC9999`), not at the moment you type it — and
+it's easy to reintroduce over and over in one session since it doesn't look wrong. Full writeup (it hits
+`.csproj` too) is in the msbuild skill's "XML comments can't contain `--`" section; the short version is:
+use a real em dash (—), a colon, or a comma instead of `--` in any XAML comment.
+
 ## CommunityToolkit.Mvvm: use classic backing-field `[ObservableProperty]`, not partial properties
 
 The newer partial-property style —
