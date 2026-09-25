@@ -1,6 +1,6 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction and reach-in techniques (access keys, default-button focus), BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, and driving a WinUI3 app externally with UI Automation for verification. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction and reach-in techniques (access keys, default-button focus), BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, and why a rebuild fails with a file-lock error while the app itself is running. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
 ---
 
 # WinUI3 (Windows App SDK) gotchas
@@ -85,6 +85,83 @@ dialog.Opened += (_, _) =>
 (`FindButtonByName` = a small recursive `VisualTreeHelper.GetChild` walk checking `FrameworkElement.Name`.)
 This works uniformly for both a compiled `ContentDialog` subclass and an ad-hoc `new ContentDialog { ... }`
 built entirely in code — the `Opened` event fires on any instance either way.
+
+## When a default-template assumption doesn't hold, grep the WindowsAppSDK's own `generic.xaml`
+
+A control's default `ControlTemplate` is not obvious from the public API surface — a property that
+*sounds* like it should reach some piece of rendered text (or a `Foreground` that *sounds* like it should
+apply) may not, because the template hardcodes a literal value or a `VisualState` overrides it. Guessing
+from behavior alone burns a round trip with the person testing the app; the template itself is available
+and searchable, offline, in the restored NuGet cache:
+```
+find ~/.nuget/packages/microsoft.windowsappsdk.winui -iname "generic.xaml"
+# .../lib/native/Microsoft.UI/Themes/generic.xaml -- the one that matters for a WinUI3 (not UWP) app
+```
+Find the control's default style (`x:Key="Default<ControlName>Style"`), then its `ControlTemplate`, and
+read the actual `Setter`/`TemplateBinding`/literal values on the named parts. Two concrete findings from
+doing this, below — both were confirmed this way, not by trial and error.
+
+### `AppBarButton`'s `Label` ignores the button's own `FontSize` — it's hardcoded to 12 in the template
+
+Setting `FontSize="32"` on an `AppBarButton` looks like it should enlarge its caption text (and the icon
+area does respond to it) — but the default template's label `TextBlock` (`x:Name="TextLabel"`) has a
+**literal** `FontSize="12"` baked into the template XAML, not a `TemplateBinding` to the button's own
+`FontSize`. The property silently does nothing for the label, in every label position (`Right`, on-top,
+`Compact`) — confirmed by reading every `TextLabel` declaration in `DefaultAppBarButtonStyle`, none of them
+bind `FontSize`. There is no style-`Setter`-only fix (you cannot target a literal value inside a template
+without replacing the whole template, which is large and WindowsAppSDK-owned). The working fix: after the
+button's own template has applied (its `Loaded` event), reach into the visual tree for the `TextBlock`
+named `"TextLabel"` and set its `FontSize` from the button's own `FontSize` directly:
+```csharp
+private void OnAppBarButtonLoaded(object sender, RoutedEventArgs e)
+{
+    if (sender is AppBarButton { FontSize: var fontSize } button
+        && FindDescendant<TextBlock>(button, "TextLabel") is { } label)
+        label.FontSize = fontSize;
+}
+
+private static T? FindDescendant<T>(DependencyObject root, string name) where T : FrameworkElement
+{
+    int count = VisualTreeHelper.GetChildrenCount(root);
+    for (int i = 0; i < count; i++)
+    {
+        var child = VisualTreeHelper.GetChild(root, i);
+        if (child is T match && match.Name == name) return match;
+        if (FindDescendant<T>(child, name) is { } found) return found;
+    }
+    return null;
+}
+```
+Wire `Loaded="OnAppBarButtonLoaded"` on each `AppBarButton` that needs this. This keeps the `FontSize` set
+in XAML as the one place that number lives — the handler just propagates it to where the template forgot to.
+
+### A disabled `MenuFlyoutItem`'s text color: `Foreground` alone is not enough — override the `ThemeResource`
+
+Setting `Foreground` on a `MenuFlyoutItem` with `IsEnabled="false"` (a common way to show a non-clickable
+label row, e.g. a status/summary line at the top of a right-click menu) does not change its rendered
+color. The `Disabled` `VisualState` in the default template sets `TextBlock.Foreground` from
+`{ThemeResource MenuFlyoutItemForegroundDisabled}`, and that `Setter` wins over the plain `Foreground`
+property once the item is disabled. The fix is to override that specific resource key **on the item's own
+`Resources` dictionary** — a `ThemeResource`/`StaticResource` lookup checks the element itself before
+falling back to the app-wide theme, so a per-instance override there beats the default without touching
+any global resource:
+```csharp
+var item = new MenuFlyoutItem { Text = "...", IsEnabled = false, Foreground = redBrush };
+item.Resources["MenuFlyoutItemForegroundDisabled"] = redBrush; // the part that actually works
+```
+The same pattern applies to any other disabled-state color that doesn't respond to a plain property
+setter — find the exact resource key the control's `Disabled` `VisualState` sets (per the technique above)
+and override that key instead of the property.
+
+## Rebuilding while the app is running fails with a file-lock error, not a compile error
+
+`dotnet build` on a WinUI3 app project that is currently running (or attached in Visual Studio) fails with
+`MSB3026`/`MSB3027` ("Could not copy ... The process cannot access the file ... because it is being used by
+another process"), retried ~10 times before erroring out — for the `.exe`/`apphost.exe` itself and every
+dependent project DLL it references. This is not a code problem and re-reading the diff won't explain it;
+check whether the app's own process is running before assuming a build regression. Don't kill the running
+process without asking — it may be the user's own active session (they could be mid-review of the exact
+change just made) — ask them to close it (or confirm before ending it yourself), then rebuild.
 
 ## `BitmapIcon` needs a real `Uri`; `ImageIcon` accepts any `ImageSource`
 
