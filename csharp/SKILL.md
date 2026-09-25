@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: Personal C# coding conventions - a project-root GlobalUsings.cs for namespaces common across that project, defaulting to modern C# 14/.NET 10 syntax unless the project is pinned to .NET Framework/Desktop, preferring a single well-named boolean expression over scattered conditional logic, required/init properties over mutable setters, records for DTOs, and propagating CancellationToken through async call chains. Use when writing or reviewing C# code, scaffolding a new .csproj, designing a data model or DTO, writing an async method, or deciding how to express a conditional/boolean check.
+description: Personal C# coding conventions - a project-root GlobalUsings.cs for namespaces common across that project, defaulting to modern C# 14/.NET 10 syntax unless the project is pinned to .NET Framework/Desktop, preferring a single well-named boolean expression over scattered conditional logic, required/init properties over mutable setters, records for DTOs, propagating CancellationToken through async call chains, and preferring extension methods over static helpers when there's one obvious subject parameter (for IntelliSense discoverability). Use when writing or reviewing C# code, scaffolding a new .csproj, designing a data model or DTO, writing an async method, deciding how to express a conditional/boolean check, or deciding whether a static helper method should be an extension method.
 ---
 
 # C# Conventions
@@ -72,3 +72,25 @@ public async Task<User> GetUserAsync(Guid id, CancellationToken cancellationToke
 ```
 
 This is easy to forget because the code compiles fine without it — a dropped token doesn't cause an error, it just means a caller's cancellation (request aborted, timeout, user navigated away) silently stops propagating partway down the stack and the expensive operation keeps running anyway. Default to threading it through; the exception is a genuinely fire-and-forget background operation that's supposed to outlive the caller's request.
+
+## Prefer extension methods over static helpers with an obvious subject
+
+When a static helper method has one parameter that's clearly "the thing being acted on," write it as an extension method on that type instead of a plain static method taking it as an argument. The author prefers this specifically for IntelliSense: typing `thing.` surfaces `thing.DoSomething()`, but a static `Helper.DoSomething(thing)` call is invisible until you already know the helper class exists and go looking for it.
+
+```csharp
+// Preferred -- discoverable by typing "name."
+public static class StringExtensions
+{
+    public static bool IsNameBad(this string name) => ...;
+}
+if (name.IsNameBad()) ...
+
+// Avoid when the extension-method form above reads equally naturally
+public static class StringHelpers
+{
+    public static bool IsNameBad(string name) => ...;
+}
+if (StringHelpers.IsNameBad(name)) ...
+```
+
+**Don't force it.** Only make something an extension method when the method genuinely reads as an operation *on* that one parameter. Skip it when there's no single obvious subject — several equally-important inputs (a diff between two objects of the same type, where neither is more "the subject" than the other), a static factory building a new instance from a primitive (`TemplateConfig.Load(path)`: `path` is just a generic `string`, not conceptually a `TemplateConfig`, so a `path.LoadAsTemplateConfig()` extension would be a non-obvious method to find hanging off every string in the codebase), or a method that's really about the *type* itself rather than a particular instance. Test: "if I were about to type `parameterName.`, would I actually expect this method to show up there?" If yes, make it an extension method. If the honest answer is "not really, I'd go looking for a helper class instead," leave it a plain static method — a forced `this` parameter makes the subject arbitrary and can read *less* clearly than the plain static call.
