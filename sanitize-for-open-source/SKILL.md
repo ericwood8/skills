@@ -1,6 +1,6 @@
 ---
 name: sanitize-for-open-source
-description: Scrub employer/client/proprietary system names, personal Windows user-folder paths (C:\Users\<name>\..., C:\<PersonalWorkFolder>\...), and "ported from/adapted from/legacy of" lineage commentary out of a repo's README, docs/specs, code comments, and config before making it public on GitHub. Use when the user says a repo is going public, asks "any problems making X public", or asks to remove employer/company/personal references from code or documentation.
+description: Scrub employer/client/proprietary system names, personal Windows user-folder paths (C:\Users\<name>\..., C:\<PersonalWorkFolder>\...), real server/database names left in "verified live against..." testing narrative, and "ported from/adapted from/legacy of" lineage commentary out of a repo's README, docs/specs, code comments, and config before making it public on GitHub. Use when the user says a repo is going public, asks "any problems making X public", or asks to remove employer/company/personal references from code or documentation.
 ---
 
 # Sanitizing a repo before it goes public
@@ -21,7 +21,7 @@ grep -rniI "<employer-or-product-name>\|<personal-windows-username>" . \
   2>/dev/null | grep -v "/bin/" | grep -v "/obj/" | grep -v "/.git/"
 ```
 
-Two independent things to look for in the same pass:
+Three independent things to look for in the same pass:
 
 1. **Employer/client/product names** — anything naming a company, a proprietary product, or an internal
    system this repo's code was influenced by (`ported from CompanyLib.X`, `like ProductName's TableY`,
@@ -33,6 +33,22 @@ Two independent things to look for in the same pass:
    employer-internal folder layout (`C:\<PersonalWorkFolder>\...`). These show up in:
    - A spec's "source: `C:\...\`" line citing where code was reviewed from
    - Example CLI invocations that accidentally used a real local path instead of a placeholder
+3. **Real server/database names in "verified live against..." testing narrative** — a status section, a
+   changelog, or a README that documents real-world verification naturally wants to say *what* was tested
+   against, and it's an easy habit to write the actual SQL Server instance name and a real client/company's
+   database name straight into the sentence (`MYSERVER\ClientCompanyDb.dbo.SomeTable`). This is easy to
+   reintroduce repeatedly rather than being a one-time leak: each new feature's own "generated live against
+   the real database" writeup tends to be drafted fresh, copying the *pattern* of an earlier sentence
+   without anyone re-checking whether the specific names in it are safe to publish. For a SQL Server-touching
+   repo, grep for the `dbo.` schema prefix (a plain substring search — trying to also pattern-match the
+   `SERVERNAME\` part reliably across different shells/tools is more fragile than it looks, backslash-
+   escaping rules vary) and eyeball each hit for a real name in front of it:
+   ```bash
+   grep -rniI '\.dbo\.' . 2>/dev/null | grep -v "/bin/\|/obj/\|/.git/"
+   ```
+   Don't just delete the sentence — the fact that real-world verification happened is worth keeping; replace
+   the specific server/database identity with a generic, consistent stand-in (see the rewrite example below)
+   the same way a lineage comment gets reframed rather than deleted outright.
 
 ## What's fine to leave — don't over-scrub
 
@@ -43,6 +59,8 @@ Two independent things to look for in the same pass:
   example — that's just illustrating "wherever you cloned it," not leaking anything.
 - **Genuinely generic placeholder paths** in usage examples (`C:\Work\MyApp\...`, `C:\MYSERVER`) — these are
   clearly stand-ins, not real personal paths.
+- **A "second database"/"a real production database" style stand-in** already used consistently for a
+  verification narrative (see the rewrite below) — that's the fix, not something left to finish.
 - **Technical "why" history that isn't lineage**: "the first attempt did X, but SQL Server rejects Y (error
   264), confirmed by testing — fixed by Z" is valuable engineering history about *this* codebase's own
   design decisions, not a reference to an outside proprietary source. Keep that kind of comment; only cut
@@ -61,6 +79,21 @@ For a whole "reused/ported code" section in a spec doc, don't just delete it —
 still worth documenting (what behavior was deliberately reproduced, what was deliberately left out, and
 why). Reframe it as a concept-level table ("Rich, cached table-model object" → what was re-derived here) 
 instead of a source-file-by-source-file attribution table.
+
+## How to rewrite a live-verification sentence naming a real server/database
+
+Keep the technical claim (a real database, a real table shape, a real result); drop the specific identity.
+Introduce one generic descriptor and reuse it for every sentence that named the same real server/database,
+rather than inventing a different placeholder each time:
+
+- Before: `` was generated live against `MYSERVER\ClientCompanyDb.dbo.Widgets` (correctly found ...) ``
+- After: `` was generated live against a second database's `dbo.Widgets` table (correctly found ...) ``,
+  with one earlier sentence establishing what "a second database" refers to ("a second, unrelated
+  production database used for testing, on the same dev SQL Server").
+
+The table/column names themselves (`Widgets`, `WidgetTypeID`) are usually fine to keep — they're a schema
+*shape*, not an identity, unless a specific name is itself the giveaway (a column or table named after the
+client's own product or internal team).
 
 ## Scope: working tree only, not git history
 
