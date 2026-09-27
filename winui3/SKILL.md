@@ -1,6 +1,6 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction and reach-in techniques (access keys, default-button focus), BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, and why a rebuild fails with a file-lock error while the app itself is running. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, and why a rebuild fails with a file-lock error while the app itself is running. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
 ---
 
 # WinUI3 (Windows App SDK) gotchas
@@ -67,6 +67,54 @@ common patterns:
   open `ContentDialog`. For a delete confirmation specifically, an inline arm/confirm on the button itself
   (first click changes its own label to "Confirm Delete?", second click actually deletes) avoids a modal
   entirely.
+
+## `Hide()`-ing a ContentDialog then `ShowAsync()`-ing the *same instance* again throws COMException
+
+This is a different trap from the "only one open at a time" rule above: it's not about two distinct
+dialogs overlapping, it's about **reshowing one dialog after it closed**. A drill-down flow (parent dialog
+-> `Hide()` -> show child dialog -> child closes -> bring the parent back) is tempting to write as "call
+`ShowAsync()` on `this` again" from inside the parent's own click handler, but that throws
+`System.Runtime.InteropServices.COMException: "An async operation was not properly started. Only a single
+ContentDialog can be open at any time."` even though nothing else is open at that moment — a `ContentDialog`
+instance is not reusable once its show/hide lifecycle has completed once. Fix: construct a **fresh instance**
+of the same dialog type for the reshow, carrying forward whatever state it needs (the record being edited):
+```csharp
+private async void OnChildRowClick(object sender, ItemClickEventArgs e)
+{
+    if (e.ClickedItem is not ChildGridRow { Entity: SalesInvoice invoice }) return;
+    Hide();
+    var child = new SalesInvoiceDetailMasterDialog(_context, invoice) { XamlRoot = XamlRoot };
+    await child.ShowAsync();
+    var reopened = new CustomerMonthlySummaryDetailMasterDialog(_context, _editing) { XamlRoot = XamlRoot };
+    await reopened.ShowAsync();
+}
+```
+Store whatever the constructor needs (e.g. the record being edited) in a field set once at construction, so
+the reshow can rebuild the dialog with the same state.
+
+## `ComboBox.SelectedValue` set before `ItemsSource` is populated does not retroactively select
+
+A lookup/foreign-key drop-down whose `SelectedValue` is assigned in the constructor (from the record being
+edited) while its `ItemsSource` is only populated later, asynchronously (a `LoadLookupsAsync()` call after
+the dialog opens), renders **blank** — even though the value is technically set on the property. Typing in
+the box then reveals the full item list, which makes it look like a plain `TextBox` that happens to
+autocomplete, not a bound `ComboBox`. This is a real WinUI3/UWP limitation: `SelectedValue` only resolves
+against whatever `ItemsSource` already contains at the moment it's assigned; it does not re-evaluate once
+the list shows up later. Fix: don't set the lookup field in the constructor at all — defer that assignment
+into the same async method that populates `ItemsSource`, right after that specific parent's options finish
+loading:
+```csharp
+// constructor: skip assigning the lookup-backed property here, only plain scalar fields
+// LoadLookupsAsync():
+foreach (var p in parents)
+{
+    p.OptionsProp = await LoadOptionsForParentAsync(p); // populates ItemsSource
+    if (_editing is not null)
+        CustomerId = _editing.CustomerId; // assign the lookup value AFTER its ItemsSource exists
+}
+```
+This applies to any control whose "selected value" binding depends on an `ItemsSource`/`ItemsSource`-like
+collection that loads asynchronously after construction — not unique to a generated screen.
 
 ## Reaching into ContentDialog's own footer buttons (access keys, default-button focus)
 

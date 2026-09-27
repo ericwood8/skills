@@ -1,6 +1,6 @@
 ---
 name: efcore-aspnet-review
-description: Checks and known defects for EF Core entities plus ASP.NET minimal-API CRUD classes with a generic repository — a no-database harness that dumps the EF model and each entity's public surface so before/after can be diffed, and the specific bugs found (a static field never assigned, GetById that throws instead of returning null, Update without an exists or id check, a dead NoContent branch, enum-typed properties mapped to columns that do not exist). Use when generating or refactoring entity classes, repositories or API endpoint classes, when verifying that a generated entity equals a hand-written one, or when a CRUD API returns wrong 404/Location values.
+description: Checks and known defects for EF Core entities plus ASP.NET minimal-API CRUD classes with a generic repository — a no-database harness that dumps the EF model and each entity's public surface so before/after can be diffed, and the specific bugs found (a static field never assigned, GetById that throws instead of returning null, Update without an exists or id check, a dead NoContent branch, enum-typed properties mapped to columns that do not exist, SqlQueryRaw against an EXEC call throwing on composing operators like SingleAsync, an implicitly-typed empty SqlParameter array failing to compile). Use when generating or refactoring entity classes, repositories or API endpoint classes, when verifying that a generated entity equals a hand-written one, or when a CRUD API returns wrong 404/Location values.
 ---
 
 # EF Core entities and minimal-API CRUD: verify and review
@@ -31,6 +31,40 @@ Create a throwaway console project (in the scratchpad, not the repo) that refere
 - `bool success = await repo.AddAsync(x); if (success) Created else NoContent` where `AddAsync` always returns true: dead branch, remove it (keep the check only where the repo really returns false, e.g. a duplicate-name check).
 - The delete helper calling `.Result` on an async call blocks a request thread; note it, and fix it when the file is otherwise being changed.
 - After changing a repository method's return type, every caller that null-checks the result stays valid; callers that assumed non-null need `?? throw`.
+
+## `SqlQueryRaw<T>` against an `EXEC <stored proc>` call: don't chain `.SingleAsync()`/`.FirstAsync()` etc. on it
+
+EF Core normally lets you compose further LINQ on top of `SqlQueryRaw<T>(...)` by wrapping the raw SQL in a
+derived-table subquery — but a stored-procedure call (`EXEC dbo.Foo_SearchCount @p1`) can't be wrapped that
+way, so any operator that needs EF to *compose* the SQL (`.SingleAsync()`, `.FirstAsync()`, `.CountAsync()`,
+etc.) throws at runtime, not compile time:
+```
+System.InvalidOperationException: 'FromSql' or 'SqlQuery' was called with non-composable SQL and with a
+query composing over it. Consider calling 'AsEnumerable' after the method to perform the composition on
+the client side.
+```
+Fix: materialize the whole result set first with `.ToListAsync()` (which just executes the `EXEC` as-is, no
+composition needed), then do the composing operator in memory:
+```csharp
+var rows = await context.Database.SqlQueryRaw<int>("EXEC [dbo].[Foo_SearchCount] @p1", parameters).ToListAsync();
+int totalCount = rows.Single();
+```
+This applies to any `SqlQueryRaw`/`FromSqlRaw` call whose SQL text starts with `EXEC` rather than `SELECT`
+— a plain `SELECT ...` string can still be composed over safely; a stored-procedure call cannot.
+
+## An empty parameter array for a `SqlQueryRaw`/`SqlParameter[]` call must be explicitly typed
+
+`var parameters = new[] { };` (or any call site where the array can end up with **zero** elements — e.g. a
+generated "count" query with no filter parameters at all) is a C# compile error, `CS0826` ("no best type
+found for implicitly-typed array"), because the compiler can't infer an element type from zero elements.
+This only shows up once a caller of the pattern actually hits the zero-element case — a template or helper
+that always emits at least one element in every sample it was tested against will look fine right up until
+a table/case with no parameters exercises it. Fix: give the array an explicit element type instead of `var`:
+```csharp
+var countParameters = new SqlParameter[] { }; // compiles even with zero elements
+```
+Worth grep-ing for `new[]` in any code (hand-written or generated) that builds a `SqlParameter[]`/similar
+array from a collection that could legitimately be empty.
 
 ## Also
 

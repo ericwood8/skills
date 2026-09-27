@@ -1,6 +1,6 @@
 ---
 name: codegen-t4-templates
-description: How to write and verify T4 (Mono.TextTemplating) code-generator templates in CodeGenNew that reproduce hand-written files — Mono T4 syntax quirks, error handling, multi-file output with @@@FILE markers, project-specific lists at the top of a template, and the method of generating over existing code, diffing, and keeping as hand-maintained whatever cannot be reproduced. Use when adding or changing a CodeGenNew template (SP_, API_, CS_, TS_), its .tt.config, the DefaultAssetSeeder list, or when deciding whether generated output may overwrite hand-written code.
+description: How to write and verify T4 (Mono.TextTemplating) code-generator templates in CodeGenNew that reproduce hand-written files — Mono T4 syntax quirks, error handling, multi-file output with @@@FILE markers, project-specific lists at the top of a template, the method of generating over existing code, diffing, and keeping as hand-maintained whatever cannot be reproduced, decoupling two features that got bundled under one flag by accident (e.g. pagination vs. searchability), syncing a template fix into a CLI-generated project's already-customized local template copy without losing project settings or hand-customizations, and using a test failure's own printed output as ground truth for fixing a wrong assertion instead of re-deriving expected text by hand. Use when adding or changing a CodeGenNew template (SP_, API_, CS_, TS_, WinUI3_), its .tt.config, the DefaultAssetSeeder list, or when deciding whether generated output may overwrite hand-written code.
 ---
 
 # CodeGenNew templates that reproduce existing code
@@ -35,6 +35,61 @@ A template that must write several files (an Angular component's css/html/spec/t
 ## Tightening vs. loosening
 
 Hand-written classes often *relax* the database: an entity property that is nullable although the column is NOT NULL, a navigation that is optional. A generator that follows the column makes such a property `required`, which makes the API refuse requests that omit it. Treat "generated is stricter than the original" as a reason to keep the file hand-maintained; "generated is looser" (navigation `required` -> nullable) is acceptable but must be reported.
+
+## Decoupling two features that got bundled together in an early version
+
+A generated screen/API can end up with two genuinely independent features gated by the *same* condition
+just because the first table tested happened to need both together — e.g. a `canPage` flag that also
+silently controlled whether the search bar showed up, because the first tables generated all had a
+searchable column. Once a table with **no** searchable column exists (or the user explicitly says so —
+here: "System wide. No pagination bar on Customer Monthly Summaries" — pagination should exist regardless
+of searchability), the bundling becomes a bug, not a simplification. Fix by introducing the second flag
+explicitly and re-deriving the first from only what it actually depends on:
+```csharp
+bool canSearch = searchFields.Count > 0;   // gates the search bar UI only
+// pagination (PaginationBar, PageNumber/TotalPages, SearchAsync call) is now unconditional
+```
+When doing this, **delete the old single-flag branches entirely** rather than leaving them as unreachable
+dead code (e.g. a `GetAll()`-fallback branch that only fired when the old combined flag was false) — this
+touches more lines across more templates than a minimal patch, but leaving dead branches violates "no dead
+code" and confuses the next reader into thinking the fallback path still matters.
+This exact split had to be threaded through every layer that independently implements search-or-not: the
+stored procedure (`SP_Search.tt` — WHERE clause becomes optional, not refused for zero filters), the API
+endpoint (`API_Search.tt`), the repository method (`CS_Repo.tt`), and both UI stacks per screen type
+(`TS_Component.tt`/`TSX_Page.tt` for web, `WinUI3_MasterScreen.tt` for desktop) — miss one layer and that
+layer alone keeps the old bundled behavior.
+
+## Sync a template fix into the CLI's already-generated project
+
+`Templates/*.tt` in the CLI's own `bin/Debug/net10.0/Templates/` folder is a **separate copy** from the
+repo source under `Templates/` at the repo root — editing the repo source and rebuilding refreshes this
+copy from the shipped embedded resource, but any project-specific customization already applied at the top
+of that local copy (namespaces, `contextType`, table-is-enum lists, etc. — the "PROJECT SETTINGS" block
+described above) gets overwritten in the process, since it's the same file. Workflow when fixing a template
+that an existing generated project (e.g. a WinUI3 app already scaffolded from an earlier CLI run) depends
+on:
+1. Fix the bug in the repo source `Templates/<Name>.tt`, verify via the test suite (`dotnet test`).
+2. Rebuild the CLI so the local copy refreshes from the fixed source.
+3. Re-apply that specific project's settings into the CLI's local copy of the template (the same edits made
+   when the project was first scaffolded — a plain overwrite/rebuild wipes them every time).
+4. Regenerate the affected files for that project via the CLI.
+5. Re-apply any **hand-customizations** made directly to the generated files after the fact (wiring a
+   generated dialog's button to a hand-added drill-down screen, an added `Entity` property on a generated
+   row class) — regeneration overwrites the file from scratch, so anything not expressible in the template
+   itself has to be reapplied by hand every time that file regenerates.
+6. Rebuild the target project and confirm 0 errors before calling the fix done.
+
+## When a test assertion is wrong, use the actual failure output as ground truth, not a re-derivation
+
+When a template's raw multi-line text output doesn't match a hand-written string assertion (e.g. asserting
+`"EXEC [dbo].[Foo_SearchCount]\", countParameters)"` as one contiguous string when the template actually
+emits the closing paren on a separate line from the SQL string), don't guess the correct expected string by
+re-reading the template and mentally re-rendering it — copy the **exact** generated text straight out of the
+test failure's own printed "Expected to find... in:" block and split/quote the assertion to match that
+literally. A string-builder-based template (one `.Append(...)` call assembling one output line) and a raw
+`<# #>`-templated one (literal template text with interpolations, spanning exactly the lines written in the
+`.tt` file) can legitimately format the "same" logical output differently — don't assume two templates that
+produce conceptually equivalent code will pass the identical assertion string.
 
 ## Things a generator cannot know (say so in the template header)
 
