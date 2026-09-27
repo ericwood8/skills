@@ -1,6 +1,6 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, and why a rebuild fails with a file-lock error while the app itself is running. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, why a rebuild fails with a file-lock error while the app itself is running, and the project owner's preferred grid/toolbar styling (bordered grids with row separator lines, shaded toolbar/pagination/search bars). Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
 ---
 
 # WinUI3 (Windows App SDK) gotchas
@@ -254,6 +254,86 @@ non-InfoBar layout that still needs the icon). WinUI3 can load an SVG straight f
 (Copy the relevant `assets/status-*.svg` file from the ui-conventions skill into the project's own `Assets/`
 folder as `Content`/`Resource`, since `ms-appx:///` resolves against the app package, not the skill
 directory.)
+
+## Grid/toolbar styling preference: bordered grids, shaded toolbars
+
+The project owner's stated preference for every grid on a WinUI3 CRUD screen (list pages, and a
+master/detail dialog's read-only child grids alike): a visible line around the whole grid and a line
+between each row, so it reads as a table instead of loose rows of text — plus a shaded background on the
+Add New/Refresh bar, the search bar, and the pagination bar, all sharing one matching look so the three
+toolbars read as a family instead of plain unstyled `StackPanel`s. Requested 2026-09-27 after seeing the
+generated screens live; CodeGenNew.Templates\WinUI3_MasterScreen_v1.tt and
+WinUI3_DetailMasterScreen_v1.tt now bake this in for every future generated screen, so a hand-built WinUI3
+screen (or one from another codegen tool) should match it too, for visual consistency:
+
+```xml
+<!-- Grid: Border around the whole thing, another Border under the header, one per row.
+     The outer Grid.RowDefinitions row this whole Border sits in MUST be "*", not "Auto" --
+     see the pitfall below; it's the easy way to lose this layout entirely. -->
+<Border BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="1" CornerRadius="4">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" /> <!-- header -->
+            <RowDefinition Height="*" />    <!-- rows -->
+        </Grid.RowDefinitions>
+        <Border Grid.Row="0" BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="0,0,0,1" Padding="8">
+            <!-- header content -->
+        </Border>
+        <ListView Grid.Row="1" Padding="0">
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="0,0,0,1" Padding="8">
+                        <!-- row content -->
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Border>
+
+<!-- Toolbar (Add New/Refresh, search, or pagination): same shaded Border on every one -->
+<Border Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+        BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
+    <StackPanel Orientation="Horizontal" Spacing="8"> <!-- buttons/fields --> </StackPanel>
+</Border>
+```
+
+`ControlStrokeColorSecondaryBrush`/`SolidBackgroundFillColorSecondaryBrush` are theme resources, so the
+border/shade follow the app's light/dark theme automatically instead of a hardcoded color — no custom
+resource dictionary needed.
+
+### Pitfall 1: the Fluent2 `Card*` brushes are the wrong choice here — they're invisible on a plain page
+
+The natural first reach for "themed card-style shading" is `CardBackgroundFillColorDefaultBrush`/
+`CardStrokeColorDefaultBrush` (the brushes Settings-style "Card" UI uses) — but they render as **no visible
+shading at all** on an ordinary page background, and this genuinely shipped once before being caught by a
+live user report. Confirmed by reading the WindowsAppSDK's own `generic.xaml` (the technique documented
+above, under "grep the WindowsAppSDK's own generic.xaml"): in the Light theme dictionary,
+`CardBackgroundFillColorDefault` is `#B3FFFFFF` — a 70%-opacity **white** fill, meant to sit on top of
+another surface (like `SolidBackgroundFillColorSecondary`), not directly on the page. Layered on an already-
+white page it's indistinguishable from no background at all; `CardStrokeColorDefault` is similarly faint
+(`#0F000000`, ~6% opacity black). Use the fully-opaque pair instead for anything meant to read as visible
+shading against a plain page: `SolidBackgroundFillColorSecondaryBrush` (`#EEEEEE` Light / `#1C1C1C` Dark) and
+`ControlStrokeColorSecondaryBrush` (`#29000000` Light / `#18FFFFFF` Dark, noticeably more visible than
+`ControlStrokeColorDefault`/`CardStrokeColorDefault`/`DividerStrokeColorDefault`, all ~6-9% opacity). The
+general lesson: a "faint tint over another surface" brush and a "flat, opaque, meant-for-the-page" brush are
+different tools, and picking the Card* one for the latter job looks fine in a quick review (or even a zoomed-
+in screenshot) but reads as "no shading at all" at normal viewing — check theme dictionary hex/alpha values
+directly rather than trusting the resource name.
+
+### Pitfall 2: an outer `Grid.RowDefinitions` row of `Auto` around a `*`-sized `ListView` grows unbounded
+
+Boxing a `ListView` in a `Border` (per the pattern above) adds a wrapping `Grid`/`Border` layer between the
+`ListView` and whatever `Grid.RowDefinitions` row it used to sit in directly. If that **outer** row is left
+(or accidentally changed to) `Height="Auto"` instead of `Height="*"`, the `Border`/inner `Grid`/`ListView`
+all size to their natural content instead of being handed a bounded height — so the inner `*` row (meant to
+make the `ListView` fill available space and scroll) has no space to fill, and the `ListView` instead grows
+to show **every** row unclipped. On a page whose own root `Grid` has no `ScrollViewer`, this pushes anything
+below it (a pagination bar in the next row) off the bottom of the window entirely — it doesn't error, it just
+silently disappears from view, which is exactly what shipped once before a live user report caught it
+("as if the grid was not capped off" was the precise, correct diagnosis). The fix is always to make sure the
+row that directly bounds the `ListView`'s box is `*`, not `Auto`, all the way up the parent chain to
+wherever the page actually has room to constrain it.
 
 ## `Windows.Storage.Pickers.FolderPicker` can't open at a specific starting directory
 
