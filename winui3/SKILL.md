@@ -1,6 +1,6 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, why a rebuild fails with a file-lock error while the app itself is running, and the project owner's preferred grid/toolbar styling (bordered grids with row separator lines, shaded toolbar/pagination/search bars). Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, why a rebuild fails with a file-lock error while the app itself is running, a ComboBox's drop-down chevron vanishing or doubling up — caused simply by HorizontalAlignment="Stretch" on the ComboBox itself, not an SDK/template bug, no custom ComboBox style needed once Stretch is removed — and the project owner's preferred grid/toolbar styling (bordered grids with row separator lines, shaded toolbar/pagination/search bars). Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
 ---
 
 # WinUI3 (Windows App SDK) gotchas
@@ -385,3 +385,39 @@ element scoped to your own window over trusting the global focused-element point
 input and can land on whatever window the person at the keyboard is actually using; drive the target
 through UIA's own patterns (`InvokePattern`, `ValuePattern`, `TogglePattern`) instead, which stay scoped to
 the element you found.
+
+## A `ComboBox`'s drop-down chevron can vanish or double up — caused by `HorizontalAlignment="Stretch"` on the `ComboBox` itself, not an SDK/template bug
+
+In an unpackaged, self-contained deployment (`WindowsPackageType=None`, `WindowsAppSDKSelfContained=true`),
+`ComboBox`es with `HorizontalAlignment="Stretch"` set explicitly lost their drop-down chevron on some
+screens — the control was always a real, fully functional `ComboBox` (confirmed via UI Automation the whole
+time — `ControlType.ComboBox`, opens and selects correctly), only the chevron glyph's own rendering was
+affected — and, after an earlier fix attempt added a second always-visible glyph on top of the stock one
+without removing the stock element, a genuine double arrow on other screens. Same build, same generated
+`ComboBox` markup pattern, different visible outcome per screen.
+
+This was first chased as an SDK/template rendering bug: a long investigation found (and "fixed") a chain of
+narrow-column quirks, `AnimatedIcon.FallbackIconSource` not engaging on an absent `Source`, icon-font glyphs
+never rendering, only literal ASCII text rendering reliably — and shipped an elaborate app-wide
+`<Style TargetType="ComboBox">` override in `App.xaml` (a verbatim copy of the SDK's own
+`DefaultComboBoxStyle`, with a widened glyph column, the stock `AnimatedIcon` forced to `Opacity="0"`, and a
+hand-added `TextBlock` "v" as a replacement glyph) to work around it.
+
+**All of that was unnecessary.** The actual, much simpler cause, found by the project owner directly:
+`HorizontalAlignment="Stretch"` on the `ComboBox` itself. Removing that one attribute — with `App.xaml`
+reverted to a completely stock `XamlControlsResources` merge and no custom `ComboBox` style at all — fixed
+every affected screen, reverified live via UI Automation + zoomed screenshots on three separate dialogs,
+including the exact one that had shown the double arrow.
+
+**Fix: never set `HorizontalAlignment="Stretch"` on a `ComboBox`.** Leave it at its default (sized to
+content) or set an explicit `Width`/`MinWidth` if a wider box is wanted. `CodeGenNew`'s WinUI3 templates
+(`Templates/WinUI3_DetailScreen_v1.tt`, `Templates/WinUI3_DetailMasterScreen_v1.tt`) generated every
+foreign-key `ComboBox` with `HorizontalAlignment="Stretch"` baked in; this was removed from both templates
+(2026-09-28) so newly generated screens don't hit this. A hand-built WinUI3 screen (or one from another
+codegen tool) should drop it too.
+
+The exact mechanism (why `Stretch` specifically corrupts the native `AnimatedIcon` chevron — a
+clipping/measure interaction, a content-vs-glyph layout race in the stock template) is still not understood,
+only empirically confirmed. If this recurs in a different project, **check for `HorizontalAlignment="Stretch"`
+on the affected `ComboBox` first** — remove it and re-test — before reaching for any custom template
+override; a custom `App.xaml` `ComboBox` style should not be needed at all.
