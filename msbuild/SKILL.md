@@ -96,3 +96,13 @@ the actual generated file (`dotnet build MyProject.slnx`), not assume `.sln`.
   ```
   This is slow (diagnostic verbosity is very chatty) but is the most reliable way to find *where in the
   pipeline* a file silently stopped being what you expected, rather than guessing from the `.csproj` alone.
+
+
+## A WinUI3 build full of impossible errors after a code-generation run: clear `obj`, restore, build twice
+
+After files are regenerated (a column renamed, a control swapped), a WinUI3 project can fail with C# errors pointing into `obj\...\*.g.cs` (for example
+`'ItemDetailViewModel' does not contain a definition for 'ItemStatus'` when the source no longer uses that name) plus `XamlCompiler ... WMC9999: Object reference not set
+to an instance of an object` and `WMC1509 No LocalAssembly parameter`. Those `.g.cs` files are stale output of the previous XAML; the real source is fine. Fix:
+`rm -rf <project>/obj`, `dotnet restore <solution>`, then `dotnet build` — and expect the **first** build after clearing `obj` to fail once with `WMC0601 Error opening XAML
+file ... App.xaml` before it has copied the file; the second build succeeds. A regeneration script should do this automatically on the first failure. (A running app locks the
+output instead and fails with `MSB3021`/`MSB3027`; close it first.)

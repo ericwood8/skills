@@ -500,3 +500,29 @@ also use `local:` for a control from `MyApp.Views`. The control fails to resolve
 - **Putting a hand-written helper in a generated project:** a small shared `UserControl` such as a
   Previous/Next pagination bar has no per-table content, so a code generator can write it as an ordinary
   file next to the pages that use it; every run rewrites the identical file.
+
+## Number and currency boxes: an inline `NumberBox` needs about 150 px beyond its digits, and a `CurrencyFormatter` will not read a plain number
+
+- **Width.** `SpinButtonPlacementMode="Inline"` puts two spin buttons and, while focused, a clear ("x") button inside the control. Sized to the
+  digits plus only the spin buttons (about 80 px) the text area is clipped to nothing: clicking works, typing appears to do nothing, and after
+  clearing the box a click elsewhere "sets it to the maximum" because the invisible digits pushed the value past `Maximum`. About 150 px beyond the
+  digits (two digits wide: roughly 170 px) types normally. Test it with a screenshot of a value typed in, not by reading the XAML.
+- **Currency typed without the symbol is silently dropped.** `CurrencyFormatter` as a `NumberBox.NumberFormatter` formats `$6468.84` but its parser
+  rejects `7777.77`, so the box reverts. Fix: a small managed class that implements both `INumberFormatter2` and `INumberParser`, formats with the
+  `CurrencyFormatter` and parses with the currency formatter first, then a `DecimalFormatter` (`ParseDouble`, `ParseInt`, `ParseUInt` each
+  `_currency.X(text) ?? _plain.X(text)`). Declare it `partial` (CsWinRT). (Compiles and is in use; reading a plain number is awaiting a click-through.)
+
+
+## A classic `{Binding}` to an empty string shows the parent object's type name
+
+In an `ItemsControl` whose `DataTemplate` is `<TextBlock Text="{Binding}" />` over a `List<string>`, an **empty-string item** prints the *row object's* `ToString()`
+(for example `InvoiceSystem.App.` clipped to the cell width) instead of nothing: with an empty string as its data the template falls back to the inherited DataContext.
+It only appears once a column has empty values, so it looks like a data bug. Fix: `<DataTemplate x:DataType="x:String"><TextBlock Text="{x:Bind}" /></DataTemplate>`.
+
+## `CalendarDatePicker`: date as `DateTimeOffset?`, no clear button, no time of day
+
+- `Date` is a nullable `DateTimeOffset`; `DateFormat="{}{month.integer}/{day.integer}/{year.full}"` (the leading `{}` escapes the braces in XAML) sets how it reads.
+  A ViewModel property of that type binds two-way with `{x:Bind}`; convert with `new DateTimeOffset(dateTime)` in and `.Value.Date + storedTimeOfDay` out so editing a
+  date never zeroes a stored time.
+- The control has **no clear button**: a nullable date needs a separate "Clear" button that sets the property to null.
+- Do not set `MinDate`/`MaxDate` from a project-wide year range if existing rows can hold older dates; a limited picker rejects them.

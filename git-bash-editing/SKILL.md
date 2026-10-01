@@ -1,6 +1,6 @@
 ---
 name: git-bash-editing
-description: Gotchas learned scripting file edits from Git Bash on Windows — backslashes and quotes mangled when code is passed through heredocs or perl one-liners, perl multi-line replacements silently matching nothing on CRLF files, sqlcmd output carrying stray carriage returns into shell loops, a working directory that resets, and node_modules junctions for scratch copies. Use when editing source files with sed/perl/heredocs/node scripts, looping over sqlcmd output, or overwriting generated files that also hold hand edits.
+description: Gotchas learned scripting file edits from Git Bash on Windows — backslashes and quotes mangled when code is passed through heredocs or perl one-liners, perl multi-line replacements silently matching nothing on CRLF files, sqlcmd output carrying stray carriage returns into shell loops, escapes written through Python strings becoming real newlines, "unexpected EOF while looking for matching quote" rejecting a command with a large heredoc, Windows paths rewritten for sqlcmd -i (use PowerShell or cygpath -w), a working directory that resets, and node_modules junctions for scratch copies. Use when editing source files with sed/perl/heredocs/node scripts, looping over sqlcmd output, or overwriting generated files that also hold hand edits.
 ---
 
 # Editing files from Git Bash on Windows
@@ -32,3 +32,28 @@ description: Gotchas learned scripting file edits from Git Bash on Windows — b
 ## Before overwriting files that may hold hand edits
 
 - Confirm the repo is clean (`git status --short`) or that the user pushed a backup, then overwrite. `git checkout -- file` is the undo, but it also discards **any earlier hand edit in the same file** — so generate and hand-fix different files in different passes, or diff first.
+
+## Four failures that kept recurring in one long session (and the rule for each)
+
+1. **"The backslash escaping slipped again" — an escape written through Python became a real character.** A Python script (run from a Bash heredoc or
+   `python - <<'EOF'`) that writes C# or JavaScript containing `\n`, `\r\n`, `\d`, `\\` inside an ordinary `'...'` or `'''...'''` string writes a **real
+   line break / lone backslash** into the file, not the two characters the target language needs. Symptoms: C# `CS1010 Newline in constant`, `CS1009 Unrecognized
+   escape sequence`, a regex such as `(\d{4})` arriving as `(d{4})`. Python itself warns first (`SyntaxWarning: "\d" is an invalid escape sequence`) — treat that
+   warning as the signal that the file content is now wrong. Fixes, in order of preference:
+   - **Edit** the one line with the Edit tool (type the escapes as they must appear in the file).
+   - Put the code in a Python **raw** string (`r'''...'''`) so backslashes stay as written; or build the backslash with `B = chr(92)`.
+   - In C# tests that check generated regex text use a verbatim string (`@"...\d{4}..."`) so the test file needs no doubled backslashes.
+   - **`re.sub(pattern, "text with \n", s)` also interprets backslashes in the replacement**; pass a function (`lambda m: text`) instead.
+   - **Never `sed 's/\\d/.../'` to fix a backslash**: it matched every letter `d` (`</td>` became `<t\d>`, `child.Var` became `chil\d.Var`). Do the replacement in Python with an
+     exact string, or use Edit.
+2. **"The newline slip in that Parse call" — the same cause in a test.** A line such as `ProjectSettings.Parse("ProjectName=Acme\nEnumTables=none")` written through
+   a Python string came out as a string literal split across two lines. After any scripted edit of a C# string literal, `grep -n` the line and look; if a quote is
+   followed by a line break, repair that line with Edit. Prefer test helpers that avoid newlines in literals (`FromValues(...)` with key/value pairs).
+3. **`/usr/bin/bash: -c: line N: unexpected EOF while looking for matching '` rejects the whole command — nothing in it ran.** Seen twice with a command that held
+   a large heredoc (a SQL file or a Python script) followed by more commands. Check what changed (`ls -la`, `git status`) before assuming a partial result:
+   it was zero. The reliable fix is to **stop putting file bodies in heredocs**: create the file with the **Write** tool, then run it (`python file.py`,
+   `sqlcmd -i file.sql`). Heredocs are fine only for short bodies with no apostrophes, backslashes or `$`.
+4. **A Windows path passed to a Windows program from Git Bash is rewritten.** `sqlcmd -i /c/InvoiceSystem/sql/x.sql` (and `-i "C:/..."`) fails with
+   `Sqlcmd: Error: Error occurred while opening or operating on file C: (Reason: Access is denied)` — and the script silently did not run (the next query shows the
+   unchanged database). Run the program with the **PowerShell tool** and a backslash path, or pass `"$(cygpath -w /c/path/x.sql)"` from Bash. After running any DDL, query the
+   catalog to confirm it took effect (column counts, `sys.foreign_keys`, `COL_LENGTH`) instead of trusting a silent exit.

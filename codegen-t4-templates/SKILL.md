@@ -94,3 +94,20 @@ produce conceptually equivalent code will pass the identical assertion string.
 ## Things a generator cannot know (say so in the template header)
 
 Collection navigation names, reverse navigations already listed by the parent (adding both sides makes JSON serialization loop), enum-typed properties, validation attributes, hand-picked sort columns, screens with detail grids or dependent drop-downs, and registration lines (DbSet, routes, sidebar).
+
+
+## Regenerating a sample project from the templates: the workflow that works
+
+- **One script per sample** (`docs\Regenerate.sh` beside the project): rebuild the CLI, **delete the CLI's `Templates` folder** (it seeds embedded templates once and never overwrites; a stale
+  folder runs old templates and looks like a template bug), copy the project's `.config` into the CLI's `Projects` folder, generate every template/table into a temp folder, copy into the
+  project, print only `diff -rq --strip-trailing-cr` against a backup taken first, then build and test. Keep the table list per template at the top; a **refusal** (a template that
+  refuses a table) is printed, not hidden.
+- **Schema changes need the database side too.** Generated search stored procedures list their columns, so after a column is added or renamed re-create them (`APPLY_SQL=1`) or the
+  app fails at run time with a missing-column error that the build cannot see.
+- **A lookup table is not always an enum.** With the project's name and shape rules a small `*Status` table is derived as an enum (no entity, repository or API), so a screen shows its
+  foreign key as a number. Set `EnumTables=none` in the project file when the table's description should be shown.
+- **Template files are CRLF in a Windows checkout**, so generated text has `\r\n`; normalise (`Replace("\r\n", "\n")`) in test helpers that assert multi-line text.
+- **The generator and the front end must agree on names.** CodeGenNew's `Pluralizer` builds the TypeScript routes; any hand-written API base class has to implement the same rule
+  (a trailing bare `s` stays, consonant + `y` becomes `ies`) or pages 404.
+- Anything a template needs to know about a **child** table (money columns, long text, captions) is available at generation time from `ChildForeignKeyModel.ReferencingTableColumns`; prefer
+  that to guessing from names at run time.
