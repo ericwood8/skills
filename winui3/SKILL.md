@@ -1,6 +1,6 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, why a rebuild fails with a file-lock error while the app itself is running, a ComboBox's drop-down chevron vanishing or doubling up — caused simply by HorizontalAlignment="Stretch" on the ComboBox itself, not an SDK/template bug, no custom ComboBox style needed once Stretch is removed — and the project owner's preferred grid/toolbar styling (bordered grids with row separator lines, shaded toolbar/pagination/search bars). Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, why a rebuild fails with a file-lock error while the app itself is running, a ComboBox's drop-down chevron vanishing or doubling up — caused simply by HorizontalAlignment="Stretch" on the ComboBox itself, not an SDK/template bug, no custom ComboBox style needed once Stretch is removed — and the project owner's preferred grid/toolbar styling (bordered grids with row separator lines, shaded toolbar/pagination/search bars)., a ContentDialog's width being capped by the ContentDialogMinWidth/ContentDialogMaxWidth theme resources (its own MinWidth/MaxWidth are ignored), ListView SelectionMode=None and IsEnabled=False making grids look broken (use Single and ItemClick), drilling from one dialog into another without crashing, xmlns prefix collisions (WMC0001), and NumberBox/CurrencyFormatter/CsWinRT1028 notes. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
 ---
 
 # WinUI3 (Windows App SDK) gotchas
@@ -421,3 +421,82 @@ clipping/measure interaction, a content-vs-glyph layout race in the stock templa
 only empirically confirmed. If this recurs in a different project, **check for `HorizontalAlignment="Stretch"`
 on the affected `ComboBox` first** — remove it and re-test — before reaching for any custom template
 override; a custom `App.xaml` `ComboBox` style should not be needed at all.
+
+
+## A ContentDialog's width is capped by two theme resources — `MinWidth`/`MaxWidth` on the dialog do nothing
+
+Symptom: a dialog stays about 550 px wide no matter what. Setting `MinWidth="800"` through `MinWidth="2400"`
+(and `MaxWidth`) on the `ContentDialog`, or `MinWidth` on the `ScrollViewer` inside it, has no effect (a
+`MinWidth` that is *smaller* than the default does take effect, which makes it look like the property works).
+Cause: the default `ContentDialog` template sizes its container from the theme resources
+`ContentDialogMinWidth` (about 320) and `ContentDialogMaxWidth` (about 548), not from the dialog's own
+properties. Content wider than that cap is clipped, which also pushes a wide grid's right-hand columns (an
+Edit/Delete column, say) out of sight. Fix: override the resources on the dialog itself.
+
+```xml
+<ContentDialog ...>
+    <ContentDialog.Resources>
+        <x:Double x:Key="ContentDialogMinWidth">320</x:Double>
+        <x:Double x:Key="ContentDialogMaxWidth">1400</x:Double>
+    </ContentDialog.Resources>
+
+    <ScrollViewer MinWidth="560" MaxHeight="680" HorizontalScrollBarVisibility="Auto">
+        ...
+    </ScrollViewer>
+</ContentDialog>
+```
+
+With the cap raised, the dialog sizes to its content up to the window, so the inner `ScrollViewer`'s own
+`MinWidth` is now the knob for "make it wider", and `HorizontalScrollBarVisibility="Auto"` is the safety net
+for content that is still wider than the window. Verified in the running app (a Detail dialog and a
+master/detail dialog with a 6-column child grid).
+
+## `ListView` row behavior: `SelectionMode="None"` and `IsEnabled="False"` both look like bugs to users
+
+Two mistakes that look reasonable when a grid is meant to be "just a display":
+- **`SelectionMode="None"`** still lets the `ListView` take keyboard focus on a click, but draws no selection.
+  Users report that clicking a row "does nothing", yet pressing the down arrow then jumps to the row *after*
+  the one they clicked, and the up arrow does nothing until the down arrow has been pressed once. Use
+  `SelectionMode="Single"` for any grid a person clicks in: the click highlights the row and the arrow keys
+  start from it. (Buttons inside the row template, such as Edit/Delete, still work with `Single`.)
+- **`IsEnabled="False"`** on a `ListView` to make it read-only turns the whole grid grey and swallows every
+  click, so it reads as broken. If rows should open something, set `IsItemClickEnabled="True"` and handle
+  `ItemClick`; the row's data item arrives as `e.ClickedItem`, so give each row object a reference to the
+  entity it was built from (an `Entity` property) instead of trying to recover it from the display strings.
+
+## Drilling from a dialog into another dialog: hide, show the child, and do not reopen the parent
+
+The one-open-at-a-time rule (section above) applies to a click inside a dialog's grid that should open another
+dialog. Pattern that works: in the `ItemClick` handler call `Hide()` on the current dialog, then
+`await new ChildDialog(...) { XamlRoot = XamlRoot }.ShowAsync()`. Do **not** make the child's closing
+reopen the parent: `Hide()` resolves the parent's own `ShowAsync()` immediately, which also unblocks any
+*ancestor* dialog awaiting it. Three or more levels deep (list, then dialog, then dialog, then dialog) two
+dialogs end up calling `ShowAsync()` at once, and the process dies with a native fault in
+`Microsoft.UI.Xaml.dll` (not a catchable exception). Closing the child simply returns to the page underneath.
+
+## `xmlns:` prefix collisions: one prefix, one namespace per XAML file
+
+A page that already declares `xmlns:local="using:MyApp.ViewModels"` for a `DataTemplate`'s `x:DataType` cannot
+also use `local:` for a control from `MyApp.Views`. The control fails to resolve with
+`WMC0001: Unknown type 'PaginationBar' in XML namespace 'using:MyApp.ViewModels'` — the message names the
+*wrong* namespace, which is the clue. Declare a second prefix (`xmlns:views="using:MyApp.Views"`) and use that.
+
+## Smaller things worth knowing
+
+- **`NumberBox.Value` is a `double`.** `{x:Bind ViewModel.Year, Mode=TwoWay}` against a `string` or `int`
+  property does not bind; use a `double` (or `double?`) property, a converter, or bind `Text`. An empty
+  `NumberBox` yields `NaN`, so check `double.IsNaN` before using the value, and convert to `decimal` for
+  money. (From the documented API; not yet confirmed in a running app.)
+- **`CurrencyFormatter` cannot be declared in XAML.** `NumberBox.NumberFormatter` takes a
+  `Windows.Globalization.NumberFormatting` formatter object, so create it in code-behind
+  (`new CurrencyFormatter(CurrencyIdentifiers.USD) { FractionDigits = 2 }`). (Not yet confirmed in a running app.)
+- **`CsWinRT1028` ("class is not marked partial")** is reported for a type in a WinUI3 project that is
+  reachable from WinRT-projected types, for example a `DbContext` subclass; declaring it `partial` is the
+  fix the warning asks for. (Not yet confirmed that it clears the warning.)
+- **A generated XAML file that compiles in one project can fail in another over a comment.** When XAML is
+  produced by a code generator, check the *generator's own* comments for `--` too; one slipped into a
+  template's XAML comment and surfaced only as `Xaml Internal Error error WMC9999: An XML comment cannot
+  contain '--'` in the consuming project, with the line and position of the comment.
+- **Putting a hand-written helper in a generated project:** a small shared `UserControl` such as a
+  Previous/Next pagination bar has no per-table content, so a code generator can write it as an ordinary
+  file next to the pages that use it; every run rewrites the identical file.
