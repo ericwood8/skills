@@ -37,3 +37,30 @@ description: Concrete Angular (standalone components, Material, ng test/ng build
 ## Dev proxy
 
 The dev server proxies `/api` to the API with the `/api` prefix stripped (`proxy.conf.js` reads an env var such as `services__timeentryapi__http__0`); the API's own routes have no `/api` prefix, and `Location` headers built as `"/api" + route` are what the browser sees. Set the env var in the same command that starts `ng serve`.
+
+## Angular 22: OnPush is the default, and it breaks "plain property in a subscribe callback" screens
+
+In Angular 22 every component without a `changeDetection` setting is `OnPush`. A screen that fills `this.rows = data` inside `subscribe` then renders **nothing** (the request succeeds, the component
+holds the data, the view stays empty, no console error). `ChangeDetectionStrategy.Default` (now deprecated alias of `Eager`) on the screen is not enough: an OnPush **ancestor** (the root `App`)
+stops change detection from reaching it, so set `changeDetection: ChangeDetectionStrategy.Default` on the root component too. `ng new` in 22 also defaults to zoneless; pass
+`--zoneless=false` for zone-based apps, and `--test-runner=vitest` is the default (the jasmine-style `describe/it/expect` specs run unchanged; run with `npm test -- --watch=false`).
+A root spec must call `fixture.detectChanges()` before it inspects the DOM.
+
+
+## An edit form that opens at the bottom of a long grid: use a native modal `<dialog>`
+
+A form rendered under the grid is off-screen on a long list, and the only sign is a longer scrollbar. Render it as `<dialog #editDialog *ngIf="selectedRow" (cancel)="$event.preventDefault(); cancel()">` and open it as soon as it exists with a setter:
+`@ViewChild('editDialog') set editDialog(el: ElementRef<HTMLDialogElement> | undefined) { if (el && !el.nativeElement.open) el.nativeElement.showModal(); }`. No library, centered over the page wherever it is scrolled, Escape fires `cancel`. Style `dialog.form-container` (width, `max-height: 90vh`, `overflow: auto`, `margin: auto`) and `::backdrop`.
+
+## The router puts the routed component NEXT TO `<router-outlet>`, not inside it
+
+In a CSS grid with the menu in column 1, the outlet itself is a grid item and the component lands in the next cell (under the menu). Wrap the outlet: `<div class="screen"><router-outlet /></div>`.
+
+## A search bar that is also a `.form-group`
+
+If global css makes every `.form-group` a column with full-width inputs, the search bar (inputs + Search + Clear) stacks vertically. Add a more specific `.form-group.form-group-search { flex-direction: row; flex-wrap: wrap; align-items: center; }` after the generic rules, with a fixed input width.
+
+## Opening a row of another screen and coming back
+
+Master-detail grids open a child row on its own screen with `router.navigateByUrl('/sales-invoice?edit=31&back=' + encodeURIComponent('/customer-monthly-summary?edit=1'))`. Each screen reads `route.snapshot.queryParamMap` in `ngOnInit` (`edit` -> `getById(...)` -> `edit(row)`; `back` -> `router.navigateByUrl(back)` after a successful save or Cancel), so the person lands back on the parent's open dialog. The route paths are the kebab-case of the table names, a contract with the hand-written `app.routes.ts`.
+The child grid's columns come from the JSON keys, which include every navigation property (`customer: null`); restrict them to the child table's own column names.

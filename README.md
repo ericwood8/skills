@@ -27,6 +27,7 @@ This repo is the version-controlled source of truth. Claude Code actually loads 
 | Skill | What it covers |
 | --- | --- |
 | [angular-crud-gotchas](angular-crud-gotchas) | Angular (standalone components, Material, ng test/build) bugs in a CRUD screen talking to an ASP.NET API |
+| [react-crud-gotchas](react-crud-gotchas) | React (Vite, react-router) bugs in a generated CRUD screen app: form under a long grid, hidden-tab validation, clearing a date, child-row navigation |
 
 ### Databases
 

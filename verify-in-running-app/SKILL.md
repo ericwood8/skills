@@ -38,3 +38,11 @@ Tell the user you are making a copy (creating a database on their server is an a
 ## What to test per screen
 
 Grid loads with real names/dates; edit form pre-fills correctly (dates, booleans, drop-downs); update, add, delete, search each reach the database; Cancel closes the form; the "in use" delete path alerts; an invalid value alerts. Finish with `ng build` and `ng test --watch=false --browsers=ChromeHeadless` (see the `angular-crud-gotchas` skill).
+
+
+## Notes from checking web screens in the built-in browser
+
+- A screenshot may time out ("the page did not finish rendering") when the app window is behind another; do not wait on it. `javascript_exec` with `getBoundingClientRect()`, `getComputedStyle` and `document.querySelectorAll` answers most layout questions (is the dialog inside the viewport after `scrollTo(0, 800)`; are the search boxes on one row = same `top`; did the date box empty after "Clear").
+- A script that sets `location.href` is cut off; navigate with the navigate tool, then run a second script.
+- To prove a save, read the row back with `sqlcmd` (a cleared date must be `NULL`, not an empty string), then restore the value.
+- You start servers, you stop them: kill by listening port (`Get-NetTCPConnection -LocalPort ...`) before a regenerate/build, and say in the answer which URLs are up.

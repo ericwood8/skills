@@ -526,3 +526,31 @@ It only appears once a column has empty values, so it looks like a data bug. Fix
   date never zeroes a stored time.
 - The control has **no clear button**: a nullable date needs a separate "Clear" button that sets the property to null.
 - Do not set `MinDate`/`MaxDate` from a project-wide year range if existing rows can hold older dates; a limited picker rejects them.
+
+
+## Several dialogs, one DbContext: `ShowAsync()` returns before the dialog's own work is done
+
+A generated app shares one `DbContext` (not thread-safe). Two "second operation was started on this context" crashes came from `ContentDialog.ShowAsync()` returning too early:
+- It returns the moment the dialog **closes**, which can be before the dialog's own `async` load (started from `Loaded`) has finished. Keep that load as a `Task` field (`Loaded += (_, _) => _loading = ViewModel.LoadAsync();`) and give the dialog a
+  `ShowAndWaitAsync()` that awaits `ShowAsync()` and then `_loading`; callers that are about to reload the list use it.
+- It also returns when the dialog `Hide()`s itself to open a child dialog. The parent's `ShowAndWaitAsync()` must additionally await a `TaskCompletionSource` that the drill-down handler sets when the child dialog is done (`finally { _drillDown.SetResult(); }`), or the page reloads
+  on the shared context while the child dialog is still loading.
+
+## Keep the error `InfoBar` outside a dialog's `ScrollViewer`
+
+A validation message placed at the top of a scrolling dialog is out of sight once the person scrolls down, so "Save does nothing". Put the `InfoBar` in a `StackPanel` **above** the `ScrollViewer`.
+
+## A `ListView` inside a `ScrollViewer`: the last row can be cut off
+
+The `ListView` sized itself from its rows' content while every `ListViewItem` container has a 40 px minimum height, so a short-row grid came out a fraction of a row too short (UIA showed the last `ListViewItem` clipped, e.g. 29 of 42 px). Fixes that together worked: an `ItemContainerStyle` for
+`ListViewItem` (`BasedOn="{StaticResource DefaultListViewItemStyle}"`) with `MinHeight` 0, and a little bottom `Padding` on the content `StackPanel` inside the dialog's `ScrollViewer`. Note that a UIA `BoundingRectangle` is the *visible* (clipped) rectangle, which is how the cut-off shows up in numbers.
+
+## `TabView` for a long form
+
+`<TabView IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" CanReorderTabs="False" CanDragTabs="False" SelectedIndex="0">` with `<TabViewItem Header="..." IsClosable="False">` pages works inside a `ContentDialog` (give each page's `ScrollViewer` a fixed `Height` in a single-form dialog; the error bar stays above the `TabView`).
+A `&` in a header must be written `&amp;`. A `NumberBox` for a decimal column also needs a code-behind `DecimalFormatter` (`FractionDigits` = the column's scale, an `IncrementNumberRounder`) to show `77.00`; the plain `NumberBox` shows `77`.
+
+## Driving the running app for a check (what worked)
+
+UI Automation as in the section above, plus: `ScrollPattern.SetScrollPercent(-1, 100)` scrolls a dialog's `ScrollViewer` to the end; `CopyFromScreen` of the window rectangle gives a screenshot (do it only when the person's own windows are not in front, e.g. an open Visual Studio shows up in it);
+use the freshly built `bin\x64\Debug\...` exe, not an older `bin\Debug\...` one (the stale one shows an old UI and misleads).

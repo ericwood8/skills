@@ -111,3 +111,20 @@ Collection navigation names, reverse navigations already listed by the parent (a
   (a trailing bare `s` stays, consonant + `y` becomes `ies`) or pages 404.
 - Anything a template needs to know about a **child** table (money columns, long text, captions) is available at generation time from `ChildForeignKeyModel.ReferencingTableColumns`; prefer
   that to guessing from names at run time.
+
+
+## Rules that must be the same on every platform belong in `CodeGenNew.Core`, not copied into each template
+
+Examples now in Core and called from the WinUI3, Angular and React templates: `FormPages.For(columns)` (Main / Billing & Shipping / Notes tabs), `GridColumns.ForGrid(columns)` (no long text, at most 20), `GridCaption.For`, `NumericClassifier.DecimalRange`, `DisplayColumnSelector`. A template then asks one question and all stacks answer the same way; a unit test of the Core method
+covers every platform. Per-template edits of six near-identical templates drifted (one got the fix, another did not) before this.
+
+## Editing a large `.tt` with a script
+
+Do multi-line edits with a small Node script written to a **file** (Write tool) that does exact-string `replace` and **throws when the match count is not exactly 1**; heredocs of a few hundred lines get rejected by the shell, and `\r\n` typed in a heredoc turned into a real line break inside generated C# test strings
+(fix with a regex pass over the test file). Use `s.replace(a, () => b)` so `$` in the replacement is not interpreted.
+
+## Regenerating the three samples
+
+`C:\InvoiceSystem` (WinUI3, `APPLY_SQL=1` after a column change), `C:\InvoiceSystemReact` and `C:\InvoiceSystemAngular` each have `docs\Regenerate.sh`; run one per template change and read the last lines. **Stop the sample's API first** (a running API locks its exe: `MSB3021`), and do not re-run a script "just to be sure" while the servers are up.
+Order after a schema change: WinUI3 with `APPLY_SQL=1`, then React, then Angular. The Angular dev server and Vite pick up regenerated files by themselves; reload the page.
+Making a new web sample: `ng new frontend --routing --style=css --ssr=false --zoneless=false --skip-git --ai-config=none --defaults --test-runner=vitest --skip-install`, add `@angular/material`, `@angular/cdk`, `@angular/animations`, then the hand-written files listed in that sample's `Regeneration.md`.
