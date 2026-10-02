@@ -57,3 +57,11 @@ description: Gotchas learned scripting file edits from Git Bash on Windows — b
    `Sqlcmd: Error: Error occurred while opening or operating on file C: (Reason: Access is denied)` — and the script silently did not run (the next query shows the
    unchanged database). Run the program with the **PowerShell tool** and a backslash path, or pass `"$(cygpath -w /c/path/x.sql)"` from Bash. After running any DDL, query the
    catalog to confirm it took effect (column counts, `sys.foreign_keys`, `COL_LENGTH`) instead of trusting a silent exit.
+
+
+## More traps seen while patching templates and docs with scripts
+
+- **A heredoc that contains an apostrophe can end the command early** ("unexpected EOF while looking for matching `'`") even with a quoted `<<'EOF'` when the Bash tool wraps the command; a long script (or a multi-file `cat > ... <<EOF` batch) with quotes in comments or strings is safer written with the **Write tool** (to the scratchpad) and then run with `python file.py` / copied into place.
+- **Escape sequences in a Python (or JS) string quietly become control characters**: `'sql\functions'` contains a **form feed** (`\f`), `'8.0\bin'` a **backspace** (`\b`), `'\t'`, `'\n'` real tabs/newlines. A path like `C:\InvoiceSystem\bin` in a non-raw string written into a doc or spec is corrupted without any error (a doc line printed `sqlunctions`). Use raw strings (`r'...'`), `chr(92)` for a backslash when building a pattern, or the Edit tool; afterwards `grep -c $'\x0c'` / `$'\x08'` the file.
+- A JS template literal turns `\`` into a backtick and `\\` into one backslash: when writing markdown with backticks and Windows paths, write the content in the template literal exactly as it should appear and do not add a second layer of escaping.
+- When a Python `.replace(old, new)` must match exactly once, `assert u.count(old) == 1` first and normalise `\r\n` to `\n` before and back after (`nl = '\r\n' if '\r\n' in s else '\n'`); read and write with `newline=''` so the file's own line endings survive, and keep a UTF-8 BOM if the file had one (`utf-8-sig`).

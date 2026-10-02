@@ -33,8 +33,9 @@ This repo is the version-controlled source of truth. Claude Code actually loads 
 
 | Skill | What it covers |
 | --- | --- |
-| [mssql](mssql) | Safety guardrails + gotchas for ad hoc T-SQL against SQL Server |
+| [mssql](mssql) | Safety guardrails + gotchas for ad hoc T-SQL against SQL Server, exporting schema and data with bcp |
 | [mysql](mysql) | Safety guardrails + gotchas for ad hoc SQL against MySQL |
+| [postgres](postgres) | Safety guardrails + gotchas for ad hoc SQL against PostgreSQL, reading its catalog, functions vs procedures, Npgsql |
 
 ### Deployment / DevOps
 
