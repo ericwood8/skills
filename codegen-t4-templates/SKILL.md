@@ -173,3 +173,10 @@ Making a new web sample: `ng new frontend --routing --style=css --ssr=false --zo
 - A CHECK list is stored as `= ANY ((ARRAY['A'::character varying, ...])::text[])`. Parse only that shape; OR/range checks must stay plain text. On an unbounded `text` column, set `maxLength` to the longest value or it is treated as long text.
 - A unique enum column cannot be cloned (no suggested value); `CloneShape` must exclude it.
 - A text in a template that contains the double hyphen of an SQL comment inside a C# string trips the dash test; build the marker with `new string('-', 2)`.
+
+## Whole-project generation: the plan lives in the template configs
+
+- A template joins "generate everything for a project" with config keys, not a list in a script: `Stacks=`, `PlanTables=` (which tables: Entity, Api, Search, Screen, ScreenForm, ScreenDetailMaster, Junction, Enum), `OutputRoot=` and `OutputFolder[.<Stack>]=`; `InPlan=false` makes it opt-in (`PlanAlso` in the project); `Dialects=` limits it to one database. A new template that is missing these is silently left out of `codegen generate`.
+- **Compile each template once per run** (`TemplateCache`): Mono.TextTemplating's compile is the cost (about a second a run), and the compiled class re-reads `Model` / `Database` / `Project` from the session each time. Re-set the session values and clear `Errors` between runs; a template's `Error(...)` then fails that run only.
+- A no-database template (`NoDatabase=true`, only the `Project` parameter) writes its own paths with `@@@FILE`; the essentials groups (App, MainWindow, styles, Program.cs ...) are such templates. Compare their output with a working sample's hand-written files, normalising line endings, before trusting them.
+- Write only when the text differs after normalising `\r\n`: a CRLF checkout then counts as unchanged, and "what changed" is a real list.
