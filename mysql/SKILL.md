@@ -43,3 +43,7 @@ description: Safety guardrails for running ad hoc SQL against a MySQL database, 
 - **`CALL` returning a flag**: `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END AS IsSelected` arrives in the Oracle EF provider's `SqlQueryRaw<T>` as a `bool` property without a cast (checked), unlike a PostgreSQL function where the column is already `boolean`.
 - **No default parameters**: a generated `Link` procedure with an optional create-user parameter must be called with an explicit `NULL` for it (`CALL T_Link({a}, {b}, NULL)`), where SQL Server and PostgreSQL leave it out.
 - **CodeGenNew on Linux MySQL (checked on 8.4.11)**: schema reading, generated procedures, the sample API and the integration tests all work with case-sensitive names, including `Movies` and `movies` as two tables; a table asked for in the wrong case is "not found" at once (`TableNotFoundException`), not a retry loop.
+
+## CHECK constraints (schema reading, 2026-10)
+
+`information_schema.CHECK_CONSTRAINTS` (8.0.16 and later; an older server errors, catch it) joined to `TABLE_CONSTRAINTS` on `CONSTRAINT_SCHEMA` / `CONSTRAINT_NAME` gives `CHECK_CLAUSE`. The text is MySQL's own rewrite: backticked names, lower-case `between` and `in`, a **character-set introducer and escaped quotes** on every string literal (`` (`s` in (_utf8mb4\'Open\',_utf8mb4\'Closed\')) ``). Normalise `\'` to `'` and drop `_charset` before parsing. A scratch copy of a database for tests needs `CREATE DATABASE`, which a login limited to one database does not have.

@@ -65,3 +65,12 @@ description: Gotchas learned scripting file edits from Git Bash on Windows — b
 - **Escape sequences in a Python (or JS) string quietly become control characters**: `'sql\functions'` contains a **form feed** (`\f`), `'8.0\bin'` a **backspace** (`\b`), `'\t'`, `'\n'` real tabs/newlines. A path like `C:\InvoiceSystem\bin` in a non-raw string written into a doc or spec is corrupted without any error (a doc line printed `sqlunctions`). Use raw strings (`r'...'`), `chr(92)` for a backslash when building a pattern, or the Edit tool; afterwards `grep -c $'\x0c'` / `$'\x08'` the file.
 - A JS template literal turns `\`` into a backtick and `\\` into one backslash: when writing markdown with backticks and Windows paths, write the content in the template literal exactly as it should appear and do not add a second layer of escaping.
 - When a Python `.replace(old, new)` must match exactly once, `assert u.count(old) == 1` first and normalise `\r\n` to `\n` before and back after (`nl = '\r\n' if '\r\n' in s else '\n'`); read and write with `newline=''` so the file's own line endings survive, and keep a UTF-8 BOM if the file had one (`utf-8-sig`).
+
+## Large heredocs and scripts: more traps (2026-10)
+
+- A big `python - <<'EOF'` or `cat > file <<'EOF'` that holds backslashes, backticks and quotes together was twice **mangled or rejected** by the shell tool (`unexpected EOF`, a backslash eaten: `'\Search'` lost its backslash, a C# `"\"` became `""`). For any file or script with such text, use the **Write** tool (to the scratchpad for a script) and run it, or the Edit tool.
+- Regex replacements over files that contain Windows paths or `\` need `chr(92)` or a raw-string check; verify by printing `repr()` of the text around a match before concluding the pattern is wrong.
+- `rm -f $TEMP/*.py` is refused (a variable in a wildcard path) and **the whole command is not run**, including the commands before it in the same line. Put clean-up in its own call, use literal paths, or leave scratch files.
+- Git Bash turns an argument starting with `/` into a Windows path when it calls a native program (`MSYS_NO_PATHCONV=1` stops it).
+- `sed -i` on a file whose line contains `|` or `&` inside the replacement needs escaping; for anything beyond one literal word use the Edit tool.
+- Preserve BOM and line endings when a script rewrites a file: read bytes, remember `startswith(b'\xef\xbb\xbf')` and whether `\r\n` was present, write them back.

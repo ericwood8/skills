@@ -180,3 +180,28 @@ Making a new web sample: `ng new frontend --routing --style=css --ssr=false --zo
 - **Compile each template once per run** (`TemplateCache`): Mono.TextTemplating's compile is the cost (about a second a run), and the compiled class re-reads `Model` / `Database` / `Project` from the session each time. Re-set the session values and clear `Errors` between runs; a template's `Error(...)` then fails that run only.
 - A no-database template (`NoDatabase=true`, only the `Project` parameter) writes its own paths with `@@@FILE`; the essentials groups (App, MainWindow, styles, Program.cs ...) are such templates. Compare their output with a working sample's hand-written files, normalising line endings, before trusting them.
 - Write only when the text differs after normalising `\r\n`: a CRLF checkout then counts as unchanged, and "what changed" is a real list.
+
+## Adding a template: the checklist
+
+A new template touches more than the two files; each of these was missed once and caught by a test or a run:
+
+1. `Templates/<Group>_<Name>_v1.tt` and `.tt.config`. The group prefix picks the menu and the default extension; a **new prefix** needs an entry in `TemplateInfo.ExtensionByGroup` (`FS` -> `fs`).
+2. `DefaultAssetSeeder.DefaultTemplateFileNames` (both files). Templates are embedded and seeded once; a template missing from the list is not shipped.
+3. The group counts in `TemplateEngineTests.The_shipped_templates_are_all_offered_with_their_groups`.
+4. A `Docs/TemplateNotes/<Name>_v1.md`, the README table row and the "N templates ship" count, a settings hint (`ProjectSettingsDialogViewModel.Hints`) and the key in `ProjectSettings.Keys` for any new project setting.
+5. A rendering test, and for generated **code** a real compile: generate for several tables of a sample database into a scratch project (add the sample's entities and `Microsoft.EntityFrameworkCore` if they need it) and run a small round trip. Output that only looks right has failed to compile before (`typeof(string?)`, a missing `using`).
+6. For SQL: apply the script to a scratch copy of the database.
+
+Shapes (pick by what the template needs, not by its name):
+- per table (`Model`): the default; `RequiresPrimaryKey`, `TableOnly`, `OutputName={Table}Dto.cs`.
+- `DatabaseOnly=true` (`Database`: every table): one file for the whole database, written with an `@@@FILE name@@@` marker.
+- `NoDatabase=true` (only `Project`): run by hand or as an essentials group; **a whole-project plan never includes a NoDatabase template** unless it has an `EssentialsGroup`.
+- `InPlan=false` + the project's `PlanAlso`: in a plan only when asked. `Dialects=SqlServer` skips it quietly for another database.
+- `SqlServerOnly=true` is forbidden by a test (every shipped template runs on every database): use `Dialects=` and, for a per-table template someone may run by hand on another database, an `Error(...)` on `Model.Dialect`.
+
+T4 traps met while doing this:
+- A compile error in a `.tt` comes back in `TemplateResult.Errors`; put them in the assertion message (`string.Join(" | ", result.Errors)`), a bare `Assert.IsTrue(result.Success)` shows nothing. Usual cause: a missing `<#@ import namespace="System.Data" #>` (for `SqlDbType`) or `System.Collections.Generic` (for `List<>`).
+- The dash test: no `--` anywhere in a `.tt` except an SQL comment at the start of a line of an `SP_` template. Inside a C# string in the template build the marker once: `string Rem = new string((char)45, 2);` and write `Line(Rem + " text")`.
+- `ColumnModel.MaxLength` of an `nvarchar` is in **bytes**: halve it for a character limit (CS_Entity does).
+- `{x}` inside an interpolated string is fine, but `global::Ns.Type` inside `{ }` of an interpolated string is read as a format specifier (`::`): use a variable.
+- Names that are reserved words come from the schema reader (`IsCSharpReservedWordName`); `Sample.Column` in the tests sets it from the name, so a test column called `class` exercises the `@class` path.

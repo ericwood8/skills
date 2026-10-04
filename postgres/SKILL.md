@@ -34,3 +34,7 @@ description: Safety guardrails for running ad hoc SQL against PostgreSQL, plus c
 - A `DateTime` maps to **`timestamp with time zone`** and Npgsql refuses any non-UTC value ("Cannot write DateTime with Kind=Unspecified to PostgreSQL type 'timestamp with time zone'"). For `timestamp` columns say so: `[Column(TypeName = "timestamp")]` or `configurationBuilder.Properties<DateTime>().HaveColumnType("timestamp")` in `ConfigureConventions`.
 - `FromSqlRaw("SELECT * FROM f(@p1, @p2)", new NpgsqlParameter("@p1", NpgsqlDbType.Text) { Value = (object?)x ?? DBNull.Value })`: type a null parameter. The `money` type works as `decimal` (`[Column(TypeName = "money")]`) but real databases use `numeric`.
 - Entities with `jsonb` columns need `[Column(TypeName = "jsonb")]` on the string property.
+
+## CHECK constraints (schema reading, 2026-10)
+
+`pg_get_constraintdef(oid)` gives `CHECK (((points >= 0) AND (points <= 10)))`; `BETWEEN` comes back expanded to two comparisons, a numeric literal can carry a cast (`(0)::numeric`) and an `IN` list comes back as `= ANY (ARRAY['a'::text, 'b'::text])`. Strip casts and parentheses before parsing. A strict bound (`> 0`) must stay strict: a whole-number column turns it into the next integer, a decimal box treats it as inclusive and the database still refuses the edge. `CREATE DATABASE x TEMPLATE y` fails while anybody is connected to `y`: terminate the sessions first (`pg_terminate_backend`).

@@ -111,3 +111,9 @@ owner may reasonably not care that old, already-superseded text is technically r
 After rewriting, re-run the search to confirm zero hits outside `.git`/`bin`/`obj`, then build and run the
 test suite to confirm the edits (which are almost always comment/doc-only) didn't touch anything that
 compiles or is asserted on.
+
+## Make the scan a test
+
+A one-off search is forgotten; a test is not. CodeGenNew has `LeftoverNamesTests`: it walks the repository (skipping `bin`, `obj`, `.git`, `.claude`, `node_modules`, `Output`), reads every text file and fails with the file and the match for each forbidden pattern (former project names, the dev machine, personal folders, a dev password, the dev login). Write each pattern as concatenated pieces (`"Time" + "Entry"`) so the test file does not match itself, and add a second test that the walk really covers templates, the readme and the test project (a skipped folder name that is too broad would otherwise hide everything).
+
+Rewording a long design document by regex is a trap: a replacement that keeps the sentence structure produces nonsense (`the API sample's` ...). Replace pointers to private research folders with a neutral phrase, then read the diff. Git history keeps the old names: say so, and tell the owner the clean option (a new repository without history) before the repo becomes visible to a reviewer.

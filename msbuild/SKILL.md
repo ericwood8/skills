@@ -106,3 +106,9 @@ to an instance of an object` and `WMC1509 No LocalAssembly parameter`. Those `.g
 `rm -rf <project>/obj`, `dotnet restore <solution>`, then `dotnet build` — and expect the **first** build after clearing `obj` to fail once with `WMC0601 Error opening XAML
 file ... App.xaml` before it has copied the file; the second build succeeds. A regeneration script should do this automatically on the first failure. (A running app locks the
 output instead and fails with `MSB3021`/`MSB3027`; close it first.)
+
+## Packing a command-line tool (`dotnet tool`)
+
+`<PackAsTool>true</PackAsTool>`, `<ToolCommandName>codegen</ToolCommandName>`, `PackageId`, `Version`, and `<None Include="..\README.md" Pack="true" PackagePath="\" />` for the readme and licence (plus `PackageReadmeFile` / `PackageLicenseFile`). `dotnet pack -o <dir>`, then `dotnet tool install --tool-path <dir2> --add-source <dir> <id>` to try it without touching the global tools. Two things bite:
+- A tool's files live under `...\.store\<id>\<version>\...` and are **replaced on every update**: a program that keeps settings, templates or output next to its exe loses them. Detect the `.store` segment and use `%APPDATA%\<Name>` instead (with an environment variable to override).
+- An XML comment in the `.csproj` that mentions `dotnet tool install --global` fails the project load (`--` in a comment, see the first section).

@@ -82,3 +82,12 @@ Grid loads with real names/dates; edit form pre-fills correctly (dates, booleans
 - After a template change, `codegen generate --project <sample> -o <sample folder> --dry-run --diff` over each sample's database is the cheapest regression check: every file that is not byte-identical (line endings ignored) is listed with its diff, in seconds. Expect zero differences for an unrelated change; a wanted change shows exactly where it lands. Then run the sample's `Regenerate.sh` (generate + build + tests) for the compile check.
 - The generate run keeps `.codegen-manifest.json` in the sample root: a dropped table's old files show as stale; delete them with `--delete-stale` (edited ones stay).
 - UI Automation traps for the CodeGenNew desktop app: a TextBox's value commits on focus loss (`SetValue`, then `SetFocus` on another control), `Remove-Item` with `-Recurse` may be blocked by the sandbox (use a fresh folder name per run), and a ContentDialog that keeps itself open after the primary button (`args.Cancel = true` with a deferral) can be clicked again for a second run.
+
+## The harness is in the repository
+
+`Docs/Verification` in CodeGenNew holds what the sections above describe as scripts: `ScratchDatabase.ps1` (SQL Server backup and restore, PostgreSQL `TEMPLATE`, MySQL table copies; `-Drop`), `UiAutomation.psm1` (start an app, find by name, invoke, assert, always stop), `Test-AppDialogs.ps1`, `Test-ApiCrud.ps1` and a recipe per stack. Prefer running them to rewriting the scaffolding. Traps they solved:
+- The SQL Server **service** writes the backup, so it cannot use the user's temp folder: use `SERVERPROPERTY('InstanceDefaultBackupPath')`. A failing native command does not stop a PowerShell script: check `$LASTEXITCODE`.
+- `dotnet run` starts the API as a child process: stopping the parent leaves the API listening. `taskkill /PID <id> /T /F`.
+- Git Bash rewrites an argument that starts with `/` (`-Route /api/customers` became a path under the Git install): set `MSYS_NO_PATHCONV=1` when calling PowerShell from Git Bash.
+- A scratch copy needs the right to create a database; a login limited to one database cannot make one.
+- Pass the connection through `ConnectionStrings__<Name>` in the environment and the password through `PGPASSWORD` / `MYSQL_PWD`; a connection string with a password never goes in a file or a script.
