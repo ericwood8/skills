@@ -554,3 +554,15 @@ A `&` in a header must be written `&amp;`. A `NumberBox` for a decimal column al
 
 UI Automation as in the section above, plus: `ScrollPattern.SetScrollPercent(-1, 100)` scrolls a dialog's `ScrollViewer` to the end; `CopyFromScreen` of the window rectangle gives a screenshot (do it only when the person's own windows are not in front, e.g. an open Visual Studio shows up in it);
 use the freshly built `bin\x64\Debug\...` exe, not an older `bin\Debug\...` one (the stale one shows an old UI and misleads).
+
+## Input controls that stop bad data (see the ui-conventions skill for the rules)
+
+How each choice is built in WinUI3, learned on the CodeGenNew Project Settings screen:
+
+- **True/false:** `CheckBox` with `IsChecked="{x:Bind IsChecked, Mode=TwoWay}"` bound to a `bool` property that reads and writes the stored string ("true"/"false").
+- **Up to three choices:** `RadioButtons` with `ItemsSource`, `SelectedItem="{x:Bind SelectedChoice, Mode=TwoWay}"` and an `ItemTemplate` (a `DataTemplate` with `x:DataType` of the choice record, kept in the dialog's `Resources` and referenced with `{StaticResource}`). The selected-item property must tolerate a null set (the control sets null when the source resets) and return null for a stored value not on the list.
+- **More than three:** `ComboBox` (not editable) with `DisplayMemberPath="Label"` and the same `SelectedItem` binding.
+- **Any of a list:** a `DropDownButton` whose `Flyout` holds an `ItemsControl` of `CheckBox`es; bind the button `Content` to a summary string ("Api, WinUI3"). Raise `PropertyChanged` for the summary when the stored value changes. Guard against feedback (a flag around the loop that sets each check box from the loaded value) so loading does not rewrite the value.
+- **Whole number:** `NumberBox` with `Minimum`, `Maximum`, `SpinButtonPlacementMode="Compact"`, `ValidationMode="InvalidInputOverwritten"` and `Value="{x:Bind NumberValue, Mode=TwoWay}"` on a `double` property where `NaN` (empty box) means blank. `x:Bind` converts `bool` to `Visibility` by itself, so `Visibility="{x:Bind IsNumber}"` needs no converter; one `DataTemplate` can hold every control kind and show the one that applies.
+- **Read-only text:** `TextBlock` (in a `Border` for a panel), never a read-only `TextBox`: a `TextBox` gets a tab stop and looks editable. If the dialog is forced to `RequestedTheme="Dark"`, black text needs a light `Border` background or it is invisible.
+- **Tabs built from data:** `TabView.TabItemsSource` with templates is unreliable for content; building the `TabViewItem`s in the constructor from a list of (title, description, rows) is simple and works. Set `IsClosable=false` on each.

@@ -1,6 +1,6 @@
 ---
 name: ui-conventions
-description: Personal desktop-dialog and toolbar UX conventions — keyboard access keys with conflict checking, Escape/Enter behavior, default-button focus, first-control focus on toolbars, tooltips on every toolbar button, and colorblind-safe status icons (shape-coded, not just color-coded) for success/warning/error messages. Framework-agnostic (applies to WPF, WinUI3, WinForms, or any desktop UI); see the winui3 skill for WinUI3-specific implementation techniques. Use when building or reviewing any dialog, form, toolbar/menu bar, or status/result message in a desktop app.
+description: Personal desktop-dialog and toolbar UX conventions — keyboard access keys with conflict checking, Escape/Enter behavior, default-button focus, first-control focus on toolbars, tooltips on every toolbar button, and colorblind-safe status icons (shape-coded, not just color-coded) for success/warning/error messages, and input-control choice rules (check box for true/false, radio buttons for up to three choices, drop-down for more, number box for whole numbers, labels not text boxes for read-only text, no more than 20 fields on a tab) so users cannot type bad values. Framework-agnostic (applies to WPF, WinUI3, WinForms, or any desktop UI); see the winui3 skill for WinUI3-specific implementation techniques. Use when building or reviewing any dialog, form, toolbar/menu bar, or status/result message in a desktop app.
 ---
 
 # Desktop UI conventions
@@ -81,3 +81,57 @@ stroke colors) or redraw at a different size — they're a starting point, not a
 winui3 skill for how to wire this into an actual WinUI3 dialog (prefer the built-in `InfoBar` control's
 `Severity` property over loading these as custom images when the framework already gives you this for
 free).
+
+## 7. Pick the input control that cannot take a bad value
+
+Apply to every screen, dialog and settings page in every project. A free-text box is the last choice,
+for values that really are free text. If the valid values are known, the control offers them, so the user
+cannot mistype one.
+
+| The field holds | Use | Notes |
+| --- | --- | --- |
+| true / false | **Check box** | Caption is the field name as a question ("Dashboard?"). Checked writes `true`, unchecked writes `false`; never ask the user to type "true". |
+| One of 2 or 3 fixed values | **Radio buttons** | Include a first choice "Not set (the default)" that writes a blank when blank is a valid value. |
+| One of more than 3 fixed values, or choices with long descriptions | **Drop-down** (combo box, not editable) | Same "Not set" first choice. |
+| Any of a fixed list (a comma-separated list of known names) | **Check boxes**, in a drop-down button's flyout when the list is long | The button shows what is ticked ("Api, WinUI3") or a prompt when none is. Single-choice drop-downs are wrong here: the user usually needs several. Keep names the list does not know when saving, so nothing is silently lost. |
+| A whole number (year, port, count, version) | **Number box** with a minimum and maximum | Empty must stay possible when blank means the default. Ports 1 to 65535. |
+| A value from the database (a table or column name) | A list picker over the real names, when a connection exists | Typing names is the fallback. |
+| Real free text (a name, a path, a namespace) | Text box | |
+
+- A value already stored that is not on the list (a hand-edited file) must survive: show no selection and
+  keep the stored text until the user picks something else.
+- Keep the list of valid values in one place in the non-UI layer (a table of key, kind, choices) so tests
+  can check it against the code that parses the value, and so every screen offers the same list.
+- Match case when loading a stored value ("sqlserver" selects "SQL Server"); write the canonical spelling.
+
+## 8. Explanatory text is a label, never a text box
+
+A text box looks like something to type in and takes a tab stop. Read-only explanatory text (what a tab
+holds, what a field means, a hint under a field) is a label / text block (in WinUI3 a `TextBlock`, inside a
+`Border` panel when it needs a background), which is not focusable and cannot be edited. Do not use a
+read-only, disabled or placeholder-filled text box for it. Do not put the explanation inside the value:
+a placeholder like "true: the plan also writes ..." makes the user wonder what to type. Caption, then the
+explanation as its own small line, then the control.
+
+- A tab description starts "This tab has ..." and is plain weight, not bold.
+- Black text needs a light panel behind it; the screen's theme may be dark, so check contrast.
+
+## 9. Captions have spaces between the words
+
+A caption made from an identifier ("DashboardStrip", "NoApiTables") is shown with the words apart
+("Dashboard Strip", "No Api Tables"), the way generated screens already caption column names. Use the
+same word-splitting function for every screen so they agree.
+
+## 10. At most 20 fields on a tab; group by what the user is deciding
+
+A settings screen with one long tab is hard to scan. Split by topic (General, Namespaces, Tables,
+Database, API, Output, Build ...), at most 20 fields per tab, each tab opening with its "This tab has ..."
+description. A field no tab lists falls into the first tab so a new setting is never hidden, and a test
+asserts that every setting is on exactly one tab and no tab is over the limit.
+
+## 11. A setting the user turns on must say what else they have to do
+
+A feature switch that only takes effect on the next generate, restart or rebuild says so in its own
+explanation line. Saving a setting does nothing by itself, and a user who ticks a box and sees no change
+assumes the feature is broken. Where a control depends on another (a "Stacks" list that decides what is
+generated), say so beside it, and state what a blank value does.

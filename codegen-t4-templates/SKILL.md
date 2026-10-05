@@ -240,3 +240,13 @@ A template that writes a document (OpenAPI, Markdown, Mermaid) is easy to get su
 - **Generating code lines from Core or a template:** a T4 helper `void Emit(List<string> lines)` that calls `Write(line)` and `Write(((char)10).ToString())` avoids escape trouble; do not write `"\n"` through perl or a heredoc.
 - **Prove a new mode or database end to end, cheaply:** a scratch database file, `codegen generate ... --essentials --build`, run the API with the connection string in the environment, `curl` the routes (search with a filter and a sort, clone, link and unlink), then `Test-ApiCrud.ps1` and `Test-OpenApiRoutes.ps1` from the PowerShell tool (a path built with `cygpath` and passed from Git Bash to `powershell -File` failed to start the API; the PowerShell tool worked). Then dry-run the seven samples: a mode that is off by default must change nothing.
 - **To look at what the schema reader decided about a column,** write a throwaway console project with `ProjectReference`s to Core, Connections and SchemaIntrospection and print the model's flags; a diagnostic `.tt` run through the CLI gave only a stack trace.
+
+
+## Adding a project setting: every place it has to appear
+
+A new `ProjectSettings` key is not finished when the property works. Also:
+- the `Keys` list, a one-line hint in `ProjectSettingsHints` (explain the effect and what blank means; do not start the hint with the value to type), and `Docs/Reference.md` (a test checks all three);
+- a tab in `ProjectSettingGroups` (at most 20 settings per tab, a test enforces it and that every key is on exactly one tab);
+- the right control: `ProjectSettingsHints.BooleanKeys` for true/false (check box), `ProjectSettingChoices` for a fixed list (radio buttons, drop-down, or multi-select) and its `Numbers` table for whole numbers with a range (number box). A test keeps the choice lists equal to the code that parses them (for example the stack list equals `ProjectPlan.KnownStacks`);
+- a flag that adds templates (`ImpliedPlanTemplates`) must say in its hint that the project has to be regenerated, and the stacks it needs: a user who ticks it and opens the app sees nothing until Generate All has run with the right stacks ticked. Blank `Stacks` generates nothing (the dialog demands a tick), so say that where the setting is shown.
+- an optional feature that is off by default is a deliberate choice (it adds files to existing projects and may add an unauthenticated endpoint); say why in the answer when asked, and make it as easy to turn on as to find.
