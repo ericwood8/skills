@@ -38,3 +38,7 @@ description: Safety guardrails for running ad hoc SQL against PostgreSQL, plus c
 ## CHECK constraints (schema reading, 2026-10)
 
 `pg_get_constraintdef(oid)` gives `CHECK (((points >= 0) AND (points <= 10)))`; `BETWEEN` comes back expanded to two comparisons, a numeric literal can carry a cast (`(0)::numeric`) and an `IN` list comes back as `= ANY (ARRAY['a'::text, 'b'::text])`. Strip casts and parentheses before parsing. A strict bound (`> 0`) must stay strict: a whole-number column turns it into the next integer, a decimal box treats it as inclusive and the database still refuses the edge. `CREATE DATABASE x TEMPLATE y` fails while anybody is connected to `y`: terminate the sessions first (`pg_terminate_backend`).
+
+## Trigger history (2026-10)
+
+One function and one `AFTER UPDATE OR DELETE ... FOR EACH ROW` trigger: `TG_OP` says `UPDATE` or `DELETE`, `OLD.<col>` is the before-image, `current_user` is the login, `now() AT TIME ZONE 'utc'` the UTC time. Quote PascalCase names in the function body too.

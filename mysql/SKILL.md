@@ -47,3 +47,9 @@ description: Safety guardrails for running ad hoc SQL against a MySQL database, 
 ## CHECK constraints (schema reading, 2026-10)
 
 `information_schema.CHECK_CONSTRAINTS` (8.0.16 and later; an older server errors, catch it) joined to `TABLE_CONSTRAINTS` on `CONSTRAINT_SCHEMA` / `CONSTRAINT_NAME` gives `CHECK_CLAUSE`. The text is MySQL's own rewrite: backticked names, lower-case `between` and `in`, a **character-set introducer and escaped quotes** on every string literal (`` (`s` in (_utf8mb4\'Open\',_utf8mb4\'Closed\')) ``). Normalise `\'` to `'` and drop `_charset` before parsing. A scratch copy of a database for tests needs `CREATE DATABASE`, which a login limited to one database does not have.
+
+## Triggers and defaults (audit trail, 2026-10)
+
+- `CREATE TRIGGER` fails with **error 1419** ("You do not have the SUPER privilege and binary logging is enabled") for a login without `SUPER` while `log_bin_trust_function_creators` is 0. A login limited to one database cannot fix it; run the script as root or set the variable. Say so in the script header, and do not claim a trigger script works until it has run on a server.
+- `DEFAULT (USER())` is refused (**error 1674**, not deterministic for the replication format): use a constant default (`'system'`) and let the application set the real user. Write the user in a trigger with `CURRENT_USER()` instead.
+- MySQL has no `AFTER UPDATE OR DELETE`: create one trigger per event (`T_U`, `T_D`) and copy `OLD.<col>`.
