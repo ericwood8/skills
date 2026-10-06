@@ -42,3 +42,11 @@ description: Safety guardrails for running ad hoc SQL against PostgreSQL, plus c
 ## Trigger history (2026-10)
 
 One function and one `AFTER UPDATE OR DELETE ... FOR EACH ROW` trigger: `TG_OP` says `UPDATE` or `DELETE`, `OLD.<col>` is the before-image, `current_user` is the login, `now() AT TIME ZONE 'utc'` the UTC time. Quote PascalCase names in the function body too.
+
+## psycopg 3 / SQLAlchemy (2026-10)
+
+- URL form: `URL.create("postgresql+psycopg", username=..., password=os.environ.get("PGPASSWORD"), host=..., port=5432, database=...)`; the package is `psycopg[binary]` (no compiler needed on Windows). `localhost` works where the machine name is refused by `pg_hba.conf`.
+- A PostgreSQL enum column needs `sqlalchemy.dialects.postgresql.ENUM(..., name="type", create_type=False)`; leave a `money` column out or cast it, SQLAlchemy has no plain type for it.
+- `ILIKE` with `escape="\\"` gives a case-insensitive "contains"; escape `\`, `%` and `_` in the user's text first.
+- `numeric` comes back as `Decimal`; FastAPI/Pydantic write it as a string unless told to write a number.
+- A delete blocked by a foreign key raises `IntegrityError` (SQLSTATE 23503): roll back and answer 400 "in use", do not let it become a 500.
