@@ -22,7 +22,7 @@ description: How to write and verify T4 (Mono.TextTemplating) code-generator tem
 - A template gets only `Model` (a `TableModel`). Extra needs are switches in the template's `.tt.config`: `NeedsRowData` (enum members), `NeedsReferencedDisplayColumns` (foreign-key drop-downs), `RequiresPrimaryKey`, `TableOnly`, `OutputName` (a pattern with `{Table}`).
 - `Templates` files are **embedded resources** in the CLI and app; after editing a `.tt` rebuild the CLI. The freshly built exe is in `bin\Debug\net10.0\`, not the older `win-x64\` folder (stale exe, "template not found"). New templates must be added to the list in `DefaultAssetSeeder`, named `Prefix_Name_v1.tt` (+ `.tt.config`); the group prefix (text before the first `_`) is the submenu and picks the default extension (`SP`->.sql, `API`/`CS`/`TS`->.cs/.cs/.ts).
 
-## Multi-file output: `@@@FILE relative/path@@@`
+## Multi-file output with FILE markers  ```@@@FILE Models/Customer.cs@@@```
 
 A template that must write several files (an Angular component's css/html/spec/ts) or files in subfolders emits a marker line before each file; `GeneratedFiles` splits the output and writes each under the output folder (creating folders). A marker directly followed by another marker gives an empty file. Paths must be relative with no `..`, no drive. The CLI prints one `Wrote` line per file; point `-o` at the target project's root (Angular: `src\app`).
 
