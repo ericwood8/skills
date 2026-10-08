@@ -74,3 +74,4 @@ description: Gotchas learned scripting file edits from Git Bash on Windows — b
 - Git Bash turns an argument starting with `/` into a Windows path when it calls a native program (`MSYS_NO_PATHCONV=1` stops it).
 - `sed -i` on a file whose line contains `|` or `&` inside the replacement needs escaping; for anything beyond one literal word use the Edit tool.
 - Preserve BOM and line endings when a script rewrites a file: read bytes, remember `startswith(b'\xef\xbb\xbf')` and whether `\r\n` was present, write them back.
+- Python run from Git Bash cannot see `/tmp`; write scratch files to the session scratchpad with a `C:/...` path. When a file mixes LF and CRLF lines, edit it as bytes and match `` explicitly instead of assuming one ending.

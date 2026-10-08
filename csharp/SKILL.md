@@ -94,3 +94,7 @@ if (StringHelpers.IsNameBad(name)) ...
 ```
 
 **Don't force it.** Only make something an extension method when the method genuinely reads as an operation *on* that one parameter. Skip it when there's no single obvious subject — several equally-important inputs (a diff between two objects of the same type, where neither is more "the subject" than the other), a static factory building a new instance from a primitive (`TemplateConfig.Load(path)`: `path` is just a generic `string`, not conceptually a `TemplateConfig`, so a `path.LoadAsTemplateConfig()` extension would be a non-obvious method to find hanging off every string in the codebase), or a method that's really about the *type* itself rather than a particular instance. Test: "if I were about to type `parameterName.`, would I actually expect this method to show up there?" If yes, make it an extension method. If the honest answer is "not really, I'd go looking for a helper class instead," leave it a plain static method — a forced `this` parameter makes the subject arbitrary and can read *less* clearly than the plain static call.
+
+## Nullable lists
+
+`.Select(...FirstOrDefault...).OfType<T>().ToList()` drops the nulls and gives a non-nullable `List<T>`; a `!` on a `List<T?>` does not change its type and still triggers CS8620.
