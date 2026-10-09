@@ -1,6 +1,6 @@
 ---
 name: docker
-description: Docker/Docker Compose gotchas learned running a Windows 11 host with Docker Desktop and Linux containers for a .NET/React app — dependency rebuilds, UTF-8 BOM, borrowing a container's CLI client, and node_modules bind-mount shadowing. Use when working with Dockerfiles or docker-compose.yml, or diagnosing a Docker build/runtime issue, especially on a Windows host running Linux containers.
+description: Docker/Docker Compose gotchas learned running a Windows 11 host with Docker Desktop and Linux containers for a .NET/React app; also Docker Desktop failing to start on a stale socket file, and running docker from Git Bash — dependency rebuilds, UTF-8 BOM, borrowing a container's CLI client, and node_modules bind-mount shadowing. Use when working with Dockerfiles or docker-compose.yml, or diagnosing a Docker build/runtime issue, especially on a Windows host running Linux containers.
 ---
 
 # Docker
@@ -34,3 +34,20 @@ A handful of gotchas from real Docker/Compose friction on a Windows-host + Linux
 **Cause:** a bind mount like `./frontend:/app` overwrites the container's own `node_modules` (installed for Linux) with the host's copy.
 
 **Fix:** add an anonymous volume for just that path so the container keeps its own copy: `volumes: [./frontend:/app, /app/node_modules]`.
+
+## 5. Docker Desktop will not start: "removing stale socket ... userAnalyticsOtlpHttp.sock: The file cannot be accessed by the system"
+
+**Symptom:** after a crash or forced quit, Docker Desktop shows `running OTel manager: removing stale socket: remove C:\Users\<you>\AppData\Local\Docker\run\userAnalyticsOtlpHttp.sock` and the engine pipe (`dockerDesktopLinuxEngine`) never appears.
+
+**Cause:** the leftover is a Unix-socket stub (a reparse point) that Windows reports as error 1920 for every operation. `del /f`, `Remove-Item -Force`, `fsutil reparsepoint delete` and `[System.IO.File]::Delete('\\?\...')` all fail with the same error, even with Docker fully quit.
+
+**Fix:** quit Docker Desktop, restart Windows, then start Docker Desktop. The file is gone after the restart. If it is not, delete it in File Explorer. Do not spend time on more delete attempts.
+
+## 6. Running docker from Git Bash on Windows
+
+- `export MSYS_NO_PATHCONV=1` first, or Git Bash rewrites container paths such as `/etc/nginx/...` into `C:/Program Files/Git/etc/...`.
+- Mount host files with `-v "$(cygpath -w "$PWD/file")":/path/in/container:ro`.
+- A failed `docker run -p` can still leave the named container created; `docker rm -f name` before reusing the name.
+- Windows reserves port ranges (`netsh interface ipv4 show excludedportrange protocol=tcp`); a port in one fails with "forbidden by its access permissions". Use ports above 18000 for throwaway tests.
+- `docker pull` and a started Docker Desktop are downloads/starts the user should know about; say which image and roughly how big before pulling.
+- For nginx configs see the `nginx-config-testing` skill.

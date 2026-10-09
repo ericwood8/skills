@@ -75,3 +75,10 @@ description: Gotchas learned scripting file edits from Git Bash on Windows — b
 - `sed -i` on a file whose line contains `|` or `&` inside the replacement needs escaping; for anything beyond one literal word use the Edit tool.
 - Preserve BOM and line endings when a script rewrites a file: read bytes, remember `startswith(b'\xef\xbb\xbf')` and whether `\r\n` was present, write them back.
 - Python run from Git Bash cannot see `/tmp`; write scratch files to the session scratchpad with a `C:/...` path. When a file mixes LF and CRLF lines, edit it as bytes and match `` explicitly instead of assuming one ending.
+
+## Backslashes lost in sed and perl replacements; the Edit tool wants a fresh Read
+
+- A replacement that must contain `\.` (an nginx or other regex) lost its backslash through `perl -e` and `sed s///` run from Git Bash, twice in a row, and the file looked fine until it was read. For any text with backslashes use the Edit tool (or Write), then grep the line to confirm.
+- The Edit and Write tools refuse a file that was not read in this conversation, and also one that another process (an IDE, a formatter, a linter) changed since the last read: read the lines again, then edit. Expect this after a sed/perl pass on the same file.
+- A multi-line `perl -0pi -e` with a long pattern silently matched nothing; check with `git diff` or `sed -n` after every such edit, and fall back to the Edit tool.
+- A very large heredoc to create a file can fail with "unexpected EOF while looking for matching quote" and write nothing; use the Write tool for file contents and keep Bash for running things.
