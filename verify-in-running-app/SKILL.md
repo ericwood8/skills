@@ -99,3 +99,7 @@ Grid loads with real names/dates; edit form pre-fills correctly (dates, booleans
 - **Log in through the form** by setting the inputs and dispatching `input` / `change`; the token survives `navigate` to another route of the same app.
 - **Make the case the screen has to handle**: a page with a single row (insert an 11th row so page 2 holds one, then delete it), an empty search, a reload after a sort (is it remembered?), a stale value in `localStorage` (is it ignored?). Read the grid's rows, the paginator text and the sort headers' `aria-sort` back from the DOM.
 - **Drop the scratch database afterwards** and re-count a table of the real one; remove `.bak` files from the instance backup folder or tell the user where they are.
+
+### Prove a live check can fail (2026-10)
+
+A check that has only ever passed proves little. After it passes, switch the fix off in the code under test (here `if (false && ...)` on the step-back in the generated view model), rebuild, run the check again and look for the failure you expect (`Page 7 of 6 (60 rows)`), then restore the file from a copy taken first and rebuild. Say in the notes that this was done. Remove your own scratch `.bak` files from the instance backup folder when the folder lets you (`rm` worked there); otherwise tell the user where they are.
