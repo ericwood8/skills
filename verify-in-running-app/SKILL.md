@@ -91,3 +91,11 @@ Grid loads with real names/dates; edit form pre-fills correctly (dates, booleans
 - Git Bash rewrites an argument that starts with `/` (`-Route /api/customers` became a path under the Git install): set `MSYS_NO_PATHCONV=1` when calling PowerShell from Git Bash.
 - A scratch copy needs the right to create a database; a login limited to one database cannot make one.
 - Pass the connection through `ConnectionStrings__<Name>` in the environment and the password through `PGPASSWORD` / `MYSQL_PWD`; a connection string with a password never goes in a file or a script.
+
+## Notes from checking paged grids end to end (2026-10)
+
+- **A file edit can move the browser pane.** The harness reports "<file> is now visible in the Browser pane" after you edit an HTML file, and the tab then shows the local file ("This tab shows a local file, not a web page"). Navigate the tab back to the app URL before the next script, and do the browser step after the edits, not between them.
+- **Starting the pair for a click-through, in one command each:** the API with `ConnectionStrings__<Name>` pointing at the copy plus `Bootstrap__AdminUserName` / `Bootstrap__AdminPassword` / `Jwt__Key` (the first admin is made on an empty user table; the copy of a database with no users needs it) and `--no-build --urls http://localhost:5084`; the UI with `services__<name>__http__0=http://localhost:5084 NODE_ENV=development npx ng serve --port 4200`. Rebuild the API only after stopping it (`MSB3027` file lock), then start it again.
+- **Log in through the form** by setting the inputs and dispatching `input` / `change`; the token survives `navigate` to another route of the same app.
+- **Make the case the screen has to handle**: a page with a single row (insert an 11th row so page 2 holds one, then delete it), an empty search, a reload after a sort (is it remembered?), a stale value in `localStorage` (is it ignored?). Read the grid's rows, the paginator text and the sort headers' `aria-sort` back from the DOM.
+- **Drop the scratch database afterwards** and re-count a table of the real one; remove `.bak` files from the instance backup folder or tell the user where they are.

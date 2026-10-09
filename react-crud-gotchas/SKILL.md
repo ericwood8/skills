@@ -25,3 +25,10 @@ description: Concrete React (Vite, react-router, plain CSS) bugs and fixes found
 ## Checking a page
 
 `npm run build` (tsc + vite) and `npm test`; then load the page in the built-in browser and measure with `getBoundingClientRect` (see the `verify-in-running-app` skill). The API uses whatever database its connection string names: say so before the person clicks Delete.
+
+## Server-paged pages: the same rules as the Angular grid (2026-10)
+
+- **A delete must read the page again** (`load(page)`), not filter the list in state: the total pages and the last page go stale otherwise. And when the page asked for comes back empty with `totalCount > 0`, load the last page there is: `if (result.items.length === 0 && result.totalCount > 0 && targetPage > 1) { load(result.totalPages, ...); return; }`.
+- **A page-size choice needs the size passed explicitly**: `setPageSize(size); load(1, filters, sort, size)`, because the state is not updated yet when `load` runs. Give `load` the size as its **last** parameter with the state as default, so every existing call keeps working.
+- **Do not add a prop to a shared component that a generator writes once** (`PaginationBar.tsx` is an essentials file: a project made earlier keeps the old one, and a new required or unknown prop fails `tsc`). Put the page-size `<select>` and the "Nothing found." paragraph in the page itself.
+- Show "Nothing found." only when a `loaded` flag is true (set after the first response).
