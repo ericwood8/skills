@@ -1,580 +1,107 @@
 ---
 name: winui3
-description: Concrete WinUI3 (Windows App SDK) gotchas and working patterns learned building an unpackaged desktop app (CodeGenNew) — CommunityToolkit.Mvvm's ObservableProperty backing-field-vs-partial-property split, TreeView's real hierarchical-binding limitation, ContentDialog's single-open restriction (both overlapping dialogs and reusing the same closed instance for a reshow) and reach-in techniques (access keys, default-button focus), ComboBox.SelectedValue not retroactively selecting once ItemsSource populates asynchronously after construction, BitmapIcon vs ImageIcon, showing success/warning/error status icons via InfoBar or SvgImageSource, the native folder picker gap, self-contained deployment breaking runtime-compiled templates, driving a WinUI3 app externally with UI Automation for verification, AppBarButton's Label FontSize being hardcoded in its default template (not bound to the button's own FontSize), MenuFlyoutItem's Disabled visual state overriding a plain Foreground, verifying a default-template assumption against the WindowsAppSDK's own generic.xaml in the NuGet cache instead of guessing, why a rebuild fails with a file-lock error while the app itself is running, a ComboBox's drop-down chevron vanishing or doubling up — caused simply by HorizontalAlignment="Stretch" on the ComboBox itself, not an SDK/template bug, no custom ComboBox style needed once Stretch is removed — and the project owner's preferred grid/toolbar styling (bordered grids with row separator lines, shaded toolbar/pagination/search bars)., a ContentDialog's width being capped by the ContentDialogMinWidth/ContentDialogMaxWidth theme resources (its own MinWidth/MaxWidth are ignored), ListView SelectionMode=None and IsEnabled=False making grids look broken (use Single and ItemClick), drilling from one dialog into another without crashing, xmlns prefix collisions (WMC0001), and NumberBox/CurrencyFormatter/CsWinRT1028 notes. Use when building, debugging, or reviewing a WinUI3/Windows App SDK app, especially unpackaged desktop ones.
+description: Rules and working patterns for WinUI3 (Windows App SDK) unpackaged desktop apps — CommunityToolkit.Mvvm properties, ContentDialog limits (one open at a time, no reshow of an instance, width caps, drill-down, shared DbContext), ComboBox/ListView/NumberBox/CalendarDatePicker/TabView/InfoBar/AppBarButton/MenuFlyoutItem behaviors, XAML comment and xmlns traps, bordered grid and toolbar styling, folder picker, self-contained settings, build file-lock errors, and driving the app with UI Automation. Use when building, debugging or reviewing a WinUI3/Windows App SDK app.
 ---
 
-# WinUI3 (Windows App SDK) gotchas
+# WinUI3 (Windows App SDK)
 
-## Writing a `.xaml` comment? See the msbuild skill's double-hyphen trap first
+## Build and project
 
-`.xaml` files are strict XML, so a `<!-- ... -->` comment containing `--` (a natural em-dash writing
-habit) fails the XAML compiler at build time (`WMC9997`/`WMC9999`), not at the moment you type it — and
-it's easy to reintroduce over and over in one session since it doesn't look wrong. Full writeup (it hits
-`.csproj` too) is in the msbuild skill's "XML comments can't contain `--`" section; the short version is:
-use a real em dash (—), a colon, or a comma instead of `--` in any XAML comment.
+- **XAML comments cannot contain `--`** (it fails the XAML compiler with `WMC9997`/`WMC9999`, also from a code generator's own template comments). Use a colon, comma or a real em dash. Same trap in `.csproj` (see the msbuild skill).
+- **Rebuild fails with `MSB3026`/`MSB3027` ("cannot access the file ... used by another process") when the app is running.** Not a code problem. Do not kill the process without asking (it may be the user's session); ask them to close it, then rebuild.
+- **Build the x64 output before driving the app:** `dotnet build <App>.csproj -p:Platform=x64`. A default-platform build leaves `bin\x64\Debug\...` stale and the stale exe shows an old UI.
+- **`WindowsAppSDKSelfContained` is separate from `SelfContained`** (see the self-contained-deployment skill): set the first `true` and the second `false`. With `SelfContained=false` use `<RuntimeIdentifier>win-x64</RuntimeIdentifier>` (singular), not `RuntimeIdentifiers`, or the build fails with "WindowsAppSDKSelfContained requires a supported Windows architecture".
+- **`xmlns:` prefix collisions (`WMC0001: Unknown type 'X' in XML namespace 'using:...ViewModels'`)**: one prefix, one namespace per file; the message names the wrong namespace, which is the clue. Declare a second prefix (`xmlns:views="using:MyApp.Views"`).
+- **`CsWinRT1028` ("class is not marked partial")** for a type reachable from WinRT types, such as a `DbContext` subclass: declare it `partial`.
+- **`FolderPicker` cannot start at an arbitrary directory** (`SuggestedStartLocation` takes only a `PickerLocationId`). Use the Win32 `SHBrowseForFolder` with `BIF_NEWDIALOGSTYLE` and a `BFFM_INITIALIZED` callback. Do not use `FolderBrowserDialog`: `UseWindowsForms` conflicts with the XAML build items (`MC6000`).
 
-## CommunityToolkit.Mvvm: use classic backing-field `[ObservableProperty]`, not partial properties
+## MVVM
 
-The newer partial-property style —
-```csharp
-public partial class FooViewModel : ObservableObject
-{
-    [ObservableProperty]
-    public partial string Name { get; set; }
-}
-```
-failed to compile in a WinUI3 project (`CS9248 "must have an implementation part"`, `CS8050`) even with
-`<LangVersion>latest</LangVersion>` forced explicitly. Root cause not identified. The classic style built
-and ran correctly the first time:
-```csharp
-public partial class FooViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private string _name;
-}
-```
-This does raise the `MVVMTK0045` advisory (partial properties are recommended for Native AOT/trimmed
-scenarios) — safe to suppress via `<NoWarn>$(NoWarn);MVVMTK0045</NoWarn>` for a project that isn't using
-Native AOT/trimming.
+- **Use classic `[ObservableProperty] private string _name;`, not partial properties** (`public partial string Name { get; set; }` failed with `CS9248`/`CS8050` even with `LangVersion` latest). Suppress the `MVVMTK0045` advisory with `<NoWarn>$(NoWarn);MVVMTK0045</NoWarn>` when not using Native AOT.
+- **A classic `{Binding}` to an empty string shows the parent object's type name** (the template falls back to the inherited DataContext). Use `<DataTemplate x:DataType="x:String"><TextBlock Text="{x:Bind}" /></DataTemplate>`.
+- **`x:Bind` converts `bool` to `Visibility`** by itself: no converter.
+- **`ComboBox.SelectedValue` assigned before `ItemsSource` is filled does not select later** (the box renders blank). Do not set lookup-backed properties in the constructor; assign them in the async method right after that parent's options finish loading.
 
-## TreeView has no simple hierarchical-binding mode across mixed item types
+## ContentDialog
 
-`TreeView.ItemsSource` bound to a flat root collection, with `TreeView.ItemTemplate` wrapping a
-`TreeViewItem` whose own `ItemsSource` points at a child collection, is a real, working pattern **only
-when every level is the same type** (a single `x:DataType` DataTemplate can't switch shape per level
-without a `ItemTemplateSelector`). Putting `ItemTemplate` directly on the inner `TreeViewItem` (instead of
-just `ItemsSource`) produces `WMC0075`/`WMC0011` "Unknown member" errors — the child template is supposed
-to come from the *same* `TreeView.ItemTemplate`, reapplied recursively, not a separate one per level.
+- **Only one can be open at a time**, even inside a button handler's deferral (`COMException: Only a single ContentDialog can be open at any time`). For a confirmation inside a dialog use a two-step confirm on the button ("Confirm Delete?") or a `Flyout` (a different popup layer).
+- **A closed instance cannot be shown again.** `Hide()` then `ShowAsync()` on the same instance throws the same COMException. Create a fresh instance and carry the state (the record being edited) in a field.
+- **Drilling from a dialog into another:** in the `ItemClick` handler `Hide()` the current dialog, then `await new ChildDialog(...) { XamlRoot = XamlRoot }.ShowAsync()`. Do not reopen the parent when the child closes: `Hide()` resolves the parent's `ShowAsync()`, which unblocks ancestors; three levels deep two dialogs call `ShowAsync()` at once and the process dies with a native fault in `Microsoft.UI.Xaml.dll`.
+- **Footer buttons** (`PrimaryButtonText` etc.) are plain strings. The default template names them `PrimaryButton`, `SecondaryButton`, `CloseButton`: in `dialog.Opened` walk the visual tree (`VisualTreeHelper.GetChild`, match `FrameworkElement.Name`) and set `AccessKey` or `Focus(FocusState.Programmatic)`. Works for subclasses and ad-hoc dialogs.
+- **Width is capped by theme resources, not by the dialog's `MinWidth`/`MaxWidth`** (a dialog stays about 550 px wide; content beyond is clipped). Override `ContentDialogMinWidth` (default about 320) and `ContentDialogMaxWidth` (about 548) in the dialog's own `Resources` (`<x:Double x:Key="ContentDialogMaxWidth">1400</x:Double>`); then the inner `ScrollViewer`'s `MinWidth` is the knob, with `HorizontalScrollBarVisibility="Auto"` as a safety net.
+- **Keep the error `InfoBar` outside the dialog's `ScrollViewer`** (a `StackPanel` above it), or a validation message scrolls out of sight and "Save does nothing".
+- **`ShowAsync()` returns when the dialog closes or `Hide()`s itself, not when its own async work is done.** With one shared (non-thread-safe) `DbContext` this causes "second operation was started on this context". Keep the dialog's load as a `Task` field (`Loaded += (_, _) => _loading = ViewModel.LoadAsync();`), give it `ShowAndWaitAsync()` that awaits `ShowAsync()` then `_loading`, and when it hides itself to open a child, also await a `TaskCompletionSource` that the drill-down handler completes in `finally`.
 
-For a two-level tree where the two levels are naturally different shapes (e.g. tables and their columns),
-it's often simpler and more robust to skip the recursive-template API entirely: keep the TreeView's real
-items flat (one level), and render the "children" as plain non-interactive content *inside* the parent
-row's own DataTemplate (an `ItemsControl` with `Visibility` bound to an expand/collapse flag). This also
-sidesteps selection/right-click ever applying to a "child" — since it was never a real tree node in the
-first place, there's nothing to select.
+## Controls
 
-## ContentDialog: only one can be open at a time — plan around it up front
+- **`ComboBox`: never set `HorizontalAlignment="Stretch"` on it.** It makes the drop-down chevron vanish or double. Leave the default or set `Width`/`MinWidth`. If a chevron misbehaves, check this first; no custom `ComboBox` style is needed. Code generators must not emit it.
+- **`ListView`: use `SelectionMode="Single"` for any grid a person clicks in.** `None` makes clicks look dead and the arrow keys jump to the wrong row. Never `IsEnabled="False"` to make it read-only (grey, swallows clicks): use `IsItemClickEnabled="True"` and `ItemClick`, and give each row object an `Entity` reference instead of parsing display strings (`e.ClickedItem`).
+- **`ListView` in a `ScrollViewer` can cut the last row** (containers have a 40 px minimum height). Give `ListViewItem` an `ItemContainerStyle` (`BasedOn="{StaticResource DefaultListViewItemStyle}"`) with `MinHeight` 0 and add a little bottom `Padding` on the content panel.
+- **`NumberBox.Value` is a `double`**: bind a `double`/`double?` property (or a converter, or `Text`); empty is `NaN`, so check `double.IsNaN`; convert to `decimal` for money. Inline spin buttons need about 150 px beyond the digits (about 170 px for two digits), or the text area clips to nothing and typing seems dead. Test with a screenshot of a typed value. A decimal column needs a code-behind `DecimalFormatter` (`FractionDigits` = scale, an `IncrementNumberRounder`) to show `77.00`.
+- **`CurrencyFormatter` cannot be declared in XAML** (create it in code-behind) **and rejects text typed without the symbol** (`7777.77` reverts). Use a small `partial` class implementing `INumberFormatter2` and `INumberParser` that formats with `CurrencyFormatter` and parses with it first, then a `DecimalFormatter` (`_currency.X(text) ?? _plain.X(text)` for `ParseDouble`, `ParseInt`, `ParseUInt`).
+- **`CalendarDatePicker`**: `Date` is a `DateTimeOffset?`; `DateFormat="{}{month.integer}/{day.integer}/{year.full}"` (leading `{}` escapes the braces). Convert with `new DateTimeOffset(dateTime)` in and `.Value.Date + storedTimeOfDay` out so editing never zeroes a stored time. No clear button: add a "Clear" button that sets null. Do not set `MinDate`/`MaxDate` from a project-wide year range if existing rows can hold older dates.
+- **`TabView` for a long form**: `IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" CanReorderTabs="False" CanDragTabs="False"` with `TabViewItem IsClosable="False"`; give each page's `ScrollViewer` a fixed `Height`; write `&` in a header as `&amp;`. `TabItemsSource` with templates is unreliable: build the `TabViewItem`s in the constructor.
+- **TreeView with different shapes per level:** the recursive `ItemTemplate` works only when every level is the same type (an inner `ItemTemplate` gives `WMC0075`/`WMC0011`). For two different levels keep the real items flat and render the children as non-interactive content inside the parent row's `DataTemplate` (an `ItemsControl` with an expand flag).
+- **`BitmapIcon` needs a real `Uri`; `ImageIcon.Source` takes any `ImageSource`** (use it for a `BitmapImage` loaded from a stream, or for `SvgImageSource`).
+- **Status icons:** prefer `InfoBar` (`Severity` Success/Warning/Error/Informational gives a shape-coded, accessible icon; put it inside a `ContentDialog`'s content, or inline instead of a modal). Use the ui-conventions skill's `assets/status-*.svg` through `<ImageIcon><ImageIcon.Source><SvgImageSource UriSource="ms-appx:///Assets/status-error.svg"/>` only when `InfoBar` does not fit; copy the file into the project's `Assets/` first.
+- **`AppBarButton.Label` ignores the button's `FontSize`**: the template's `TextLabel` has a literal `FontSize="12"`. On the button's `Loaded` event find the `TextBlock` named `TextLabel` in the visual tree (a recursive `VisualTreeHelper.GetChild` walk) and set its `FontSize` from the button's.
+- **A disabled `MenuFlyoutItem` ignores `Foreground`**: its `Disabled` visual state sets the color from `MenuFlyoutItemForegroundDisabled`. Override that key on the item's own `Resources`: `item.Resources["MenuFlyoutItemForegroundDisabled"] = brush;`. Same pattern for any disabled-state color.
+- **Pagination bar `ComboBox` in a `UserControl`:** set `ItemsSource` and `SelectedItem` in the constructor after `InitializeComponent()` (not `x:Bind`); update `SelectedItem` from the dependency property's changed callback; `SelectionChanged` also fires for programmatic selection, so raise the page-size event only when the size differs from the property.
 
-Showing a second `ContentDialog` while one is already open (even mid-deferral, inside a `PrimaryButtonClick`
-handler) throws `COMException: "Only a single ContentDialog can be open at any time."` This bites two
-common patterns:
-- A confirmation prompt shown from inside another dialog's button handler (e.g. "this folder doesn't
-  exist, create it?"). Fix: don't nest — either do a two-step confirm inline in the same dialog (first
-  click warns, second click on the same input proceeds), or resolve it without a modal at all.
-- A "type a name"/delete-confirmation prompt opened from a dialog that is itself a `ContentDialog` (e.g. a
-  template-management screen's "New..."/"Delete" buttons). Fix: use a `Flyout` instead of a nested
-  `ContentDialog` for the prompt — a `Flyout` is a different popup layer and coexists fine with an already-
-  open `ContentDialog`. For a delete confirmation specifically, an inline arm/confirm on the button itself
-  (first click changes its own label to "Confirm Delete?", second click actually deletes) avoids a modal
-  entirely.
+## Input controls that stop bad data (rules in the ui-conventions skill)
 
-## `Hide()`-ing a ContentDialog then `ShowAsync()`-ing the *same instance* again throws COMException
+- **True/false:** `CheckBox` with `IsChecked="{x:Bind IsChecked, Mode=TwoWay}"` on a `bool` property that reads and writes the stored string.
+- **Up to three choices:** `RadioButtons` with `ItemsSource`, `SelectedItem="{x:Bind SelectedChoice, Mode=TwoWay}"` and an `ItemTemplate` (`DataTemplate` with `x:DataType`, kept in `Resources`). The selected-item property must tolerate a null set and return null for a stored value not on the list.
+- **More than three:** a non-editable `ComboBox` with `DisplayMemberPath="Label"` and the same binding.
+- **Any of a list:** a `DropDownButton` whose `Flyout` holds an `ItemsControl` of `CheckBox`es; bind `Content` to a summary string and raise `PropertyChanged` for it; guard against feedback (a flag around the loop that sets each box from the loaded value).
+- **Whole number:** `NumberBox` with `Minimum`, `Maximum`, `SpinButtonPlacementMode="Compact"`, `ValidationMode="InvalidInputOverwritten"`, `Value="{x:Bind NumberValue, Mode=TwoWay}"` on a `double` where `NaN` means blank. One `DataTemplate` can hold every control kind and show the one that applies.
+- **Read-only text:** `TextBlock` (in a `Border` for a panel), never a read-only `TextBox` (tab stop, looks editable). In a dialog forced to `RequestedTheme="Dark"`, black text needs a light `Border` background.
 
-This is a different trap from the "only one open at a time" rule above: it's not about two distinct
-dialogs overlapping, it's about **reshowing one dialog after it closed**. A drill-down flow (parent dialog
--> `Hide()` -> show child dialog -> child closes -> bring the parent back) is tempting to write as "call
-`ShowAsync()` on `this` again" from inside the parent's own click handler, but that throws
-`System.Runtime.InteropServices.COMException: "An async operation was not properly started. Only a single
-ContentDialog can be open at any time."` even though nothing else is open at that moment — a `ContentDialog`
-instance is not reusable once its show/hide lifecycle has completed once. Fix: construct a **fresh instance**
-of the same dialog type for the reshow, carrying forward whatever state it needs (the record being edited):
-```csharp
-private async void OnChildRowClick(object sender, ItemClickEventArgs e)
-{
-    if (e.ClickedItem is not ChildGridRow { Entity: SalesInvoice invoice }) return;
-    Hide();
-    var child = new SalesInvoiceDetailMasterDialog(_context, invoice) { XamlRoot = XamlRoot };
-    await child.ShowAsync();
-    var reopened = new CustomerMonthlySummaryDetailMasterDialog(_context, _editing) { XamlRoot = XamlRoot };
-    await reopened.ShowAsync();
-}
-```
-Store whatever the constructor needs (e.g. the record being edited) in a field set once at construction, so
-the reshow can rebuild the dialog with the same state.
+## Grid and toolbar styling (the project owner's preference)
 
-## `ComboBox.SelectedValue` set before `ItemsSource` is populated does not retroactively select
-
-A lookup/foreign-key drop-down whose `SelectedValue` is assigned in the constructor (from the record being
-edited) while its `ItemsSource` is only populated later, asynchronously (a `LoadLookupsAsync()` call after
-the dialog opens), renders **blank** — even though the value is technically set on the property. Typing in
-the box then reveals the full item list, which makes it look like a plain `TextBox` that happens to
-autocomplete, not a bound `ComboBox`. This is a real WinUI3/UWP limitation: `SelectedValue` only resolves
-against whatever `ItemsSource` already contains at the moment it's assigned; it does not re-evaluate once
-the list shows up later. Fix: don't set the lookup field in the constructor at all — defer that assignment
-into the same async method that populates `ItemsSource`, right after that specific parent's options finish
-loading:
-```csharp
-// constructor: skip assigning the lookup-backed property here, only plain scalar fields
-// LoadLookupsAsync():
-foreach (var p in parents)
-{
-    p.OptionsProp = await LoadOptionsForParentAsync(p); // populates ItemsSource
-    if (_editing is not null)
-        CustomerId = _editing.CustomerId; // assign the lookup value AFTER its ItemsSource exists
-}
-```
-This applies to any control whose "selected value" binding depends on an `ItemsSource`/`ItemsSource`-like
-collection that loads asynchronously after construction — not unique to a generated screen.
-
-## Reaching into ContentDialog's own footer buttons (access keys, default-button focus)
-
-`PrimaryButtonText`/`SecondaryButtonText`/`CloseButtonText` are plain strings — there's no direct XAML
-hook to set `AccessKey` or focus on them. But the default `ContentDialog` template names its generated
-buttons **"PrimaryButton"**, **"SecondaryButton"**, **"CloseButton"** (stable since UWP), so you can reach
-them via a visual-tree walk once the dialog is open:
-```csharp
-dialog.Opened += (_, _) =>
-{
-    var primary = FindButtonByName(dialog, "PrimaryButton");
-    primary.AccessKey = "S";
-    primary.Focus(FocusState.Programmatic); // if it's the DefaultButton
-};
-```
-(`FindButtonByName` = a small recursive `VisualTreeHelper.GetChild` walk checking `FrameworkElement.Name`.)
-This works uniformly for both a compiled `ContentDialog` subclass and an ad-hoc `new ContentDialog { ... }`
-built entirely in code — the `Opened` event fires on any instance either way.
-
-## When a default-template assumption doesn't hold, grep the WindowsAppSDK's own `generic.xaml`
-
-A control's default `ControlTemplate` is not obvious from the public API surface — a property that
-*sounds* like it should reach some piece of rendered text (or a `Foreground` that *sounds* like it should
-apply) may not, because the template hardcodes a literal value or a `VisualState` overrides it. Guessing
-from behavior alone burns a round trip with the person testing the app; the template itself is available
-and searchable, offline, in the restored NuGet cache:
-```
-find ~/.nuget/packages/microsoft.windowsappsdk.winui -iname "generic.xaml"
-# .../lib/native/Microsoft.UI/Themes/generic.xaml -- the one that matters for a WinUI3 (not UWP) app
-```
-Find the control's default style (`x:Key="Default<ControlName>Style"`), then its `ControlTemplate`, and
-read the actual `Setter`/`TemplateBinding`/literal values on the named parts. Two concrete findings from
-doing this, below — both were confirmed this way, not by trial and error.
-
-### `AppBarButton`'s `Label` ignores the button's own `FontSize` — it's hardcoded to 12 in the template
-
-Setting `FontSize="32"` on an `AppBarButton` looks like it should enlarge its caption text (and the icon
-area does respond to it) — but the default template's label `TextBlock` (`x:Name="TextLabel"`) has a
-**literal** `FontSize="12"` baked into the template XAML, not a `TemplateBinding` to the button's own
-`FontSize`. The property silently does nothing for the label, in every label position (`Right`, on-top,
-`Compact`) — confirmed by reading every `TextLabel` declaration in `DefaultAppBarButtonStyle`, none of them
-bind `FontSize`. There is no style-`Setter`-only fix (you cannot target a literal value inside a template
-without replacing the whole template, which is large and WindowsAppSDK-owned). The working fix: after the
-button's own template has applied (its `Loaded` event), reach into the visual tree for the `TextBlock`
-named `"TextLabel"` and set its `FontSize` from the button's own `FontSize` directly:
-```csharp
-private void OnAppBarButtonLoaded(object sender, RoutedEventArgs e)
-{
-    if (sender is AppBarButton { FontSize: var fontSize } button
-        && FindDescendant<TextBlock>(button, "TextLabel") is { } label)
-        label.FontSize = fontSize;
-}
-
-private static T? FindDescendant<T>(DependencyObject root, string name) where T : FrameworkElement
-{
-    int count = VisualTreeHelper.GetChildrenCount(root);
-    for (int i = 0; i < count; i++)
-    {
-        var child = VisualTreeHelper.GetChild(root, i);
-        if (child is T match && match.Name == name) return match;
-        if (FindDescendant<T>(child, name) is { } found) return found;
-    }
-    return null;
-}
-```
-Wire `Loaded="OnAppBarButtonLoaded"` on each `AppBarButton` that needs this. This keeps the `FontSize` set
-in XAML as the one place that number lives — the handler just propagates it to where the template forgot to.
-
-### A disabled `MenuFlyoutItem`'s text color: `Foreground` alone is not enough — override the `ThemeResource`
-
-Setting `Foreground` on a `MenuFlyoutItem` with `IsEnabled="false"` (a common way to show a non-clickable
-label row, e.g. a status/summary line at the top of a right-click menu) does not change its rendered
-color. The `Disabled` `VisualState` in the default template sets `TextBlock.Foreground` from
-`{ThemeResource MenuFlyoutItemForegroundDisabled}`, and that `Setter` wins over the plain `Foreground`
-property once the item is disabled. The fix is to override that specific resource key **on the item's own
-`Resources` dictionary** — a `ThemeResource`/`StaticResource` lookup checks the element itself before
-falling back to the app-wide theme, so a per-instance override there beats the default without touching
-any global resource:
-```csharp
-var item = new MenuFlyoutItem { Text = "...", IsEnabled = false, Foreground = redBrush };
-item.Resources["MenuFlyoutItemForegroundDisabled"] = redBrush; // the part that actually works
-```
-The same pattern applies to any other disabled-state color that doesn't respond to a plain property
-setter — find the exact resource key the control's `Disabled` `VisualState` sets (per the technique above)
-and override that key instead of the property.
-
-## Rebuilding while the app is running fails with a file-lock error, not a compile error
-
-`dotnet build` on a WinUI3 app project that is currently running (or attached in Visual Studio) fails with
-`MSB3026`/`MSB3027` ("Could not copy ... The process cannot access the file ... because it is being used by
-another process"), retried ~10 times before erroring out — for the `.exe`/`apphost.exe` itself and every
-dependent project DLL it references. This is not a code problem and re-reading the diff won't explain it;
-check whether the app's own process is running before assuming a build regression. Don't kill the running
-process without asking — it may be the user's own active session (they could be mid-review of the exact
-change just made) — ask them to close it (or confirm before ending it yourself), then rebuild.
-
-## `BitmapIcon` needs a real `Uri`; `ImageIcon` accepts any `ImageSource`
-
-If icons are loaded from an embedded resource stream (`BitmapImage` populated via `SetSourceAsync`, no
-backing file/Uri at all), `<BitmapIcon UriSource="...">` won't work — its `UriSource` is null since the
-image was never constructed from a URI. Use `<ImageIcon Source="{x:Bind SomeBitmapImage}">` instead;
-`ImageIcon.Source` is a plain `ImageSource` and works with any already-constructed `BitmapImage`,
-regardless of how its pixels were loaded.
-
-## Showing success/warning/error status icons (shape-coded, not just color-coded)
-
-See the ui-conventions skill for the general convention (green check / amber triangle+`!` / red circle+X,
-distinguished by shape so it doesn't rely on color alone) and its bundled `assets/status-*.svg` icons.
-Two ways to actually show it in WinUI3, in order of preference:
-
-**Prefer the built-in `InfoBar` control first.** It already has a `Severity` property
-(`Success`/`Warning`/`Error`/`Informational`) that renders the correct shape-coded, theme-aware,
-accessible icon with zero custom assets:
-```xml
-<InfoBar IsOpen="{x:Bind ViewModel.HasResult, Mode=OneWay}"
-         Severity="{x:Bind ViewModel.ResultSeverity, Mode=OneWay}"
-         Title="{x:Bind ViewModel.ResultTitle, Mode=OneWay}"
-         Message="{x:Bind ViewModel.ResultMessage, Mode=OneWay}" />
-```
-For a modal popup like a "Template generation failed:" dialog, put the `InfoBar` *inside* the
-`ContentDialog`'s content instead of building a custom icon+text header — this keeps the existing modal
-button flow (OK/Retry/Cancel) while getting the icon for free. For a non-blocking result (most "it worked" /
-"here's a warning" cases don't actually need to be modal), consider dropping `ContentDialog` entirely and
-showing the `InfoBar` inline in the window — fewer clicks, same information.
-
-**Use the bundled SVG assets directly only when `InfoBar`'s built-in styling doesn't fit** (e.g. a custom
-non-InfoBar layout that still needs the icon). WinUI3 can load an SVG straight from disk via
-`SvgImageSource` + `Image` (or wrap it in `ImageIcon`, per the `BitmapIcon`-vs-`ImageIcon` note above —
-`ImageIcon.Source` accepts any `ImageSource`, and `SvgImageSource` is one):
-```xml
-<ImageIcon Width="20" Height="20">
-    <ImageIcon.Source>
-        <SvgImageSource UriSource="ms-appx:///Assets/status-error.svg" />
-    </ImageIcon.Source>
-</ImageIcon>
-```
-(Copy the relevant `assets/status-*.svg` file from the ui-conventions skill into the project's own `Assets/`
-folder as `Content`/`Resource`, since `ms-appx:///` resolves against the app package, not the skill
-directory.)
-
-## Grid/toolbar styling preference: bordered grids, shaded toolbars
-
-The project owner's stated preference for every grid on a WinUI3 CRUD screen (list pages, and a
-master/detail dialog's read-only child grids alike): a visible line around the whole grid and a line
-between each row, so it reads as a table instead of loose rows of text — plus a shaded background on the
-Add New/Refresh bar, the search bar, and the pagination bar, all sharing one matching look so the three
-toolbars read as a family instead of plain unstyled `StackPanel`s. Requested 2026-09-27 after seeing the
-generated screens live; CodeGenNew.Templates\WinUI3_MasterScreen_v1.tt and
-WinUI3_DetailMasterScreen_v1.tt now bake this in for every future generated screen, so a hand-built WinUI3
-screen (or one from another codegen tool) should match it too, for visual consistency:
+Every grid on a CRUD screen (list pages and a master/detail dialog's child grids): a visible line around the whole grid and between rows, plus one matching shaded look on the Add New/Refresh bar, the search bar and the pagination bar. Use opaque theme resources so light/dark follow the app:
 
 ```xml
-<!-- Grid: Border around the whole thing, another Border under the header, one per row.
-     The outer Grid.RowDefinitions row this whole Border sits in MUST be "*", not "Auto" --
-     see the pitfall below; it's the easy way to lose this layout entirely. -->
 <Border BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="1" CornerRadius="4">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" /> <!-- header -->
             <RowDefinition Height="*" />    <!-- rows -->
         </Grid.RowDefinitions>
-        <Border Grid.Row="0" BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="0,0,0,1" Padding="8">
-            <!-- header content -->
-        </Border>
+        <Border Grid.Row="0" BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="0,0,0,1" Padding="8"> <!-- header --> </Border>
         <ListView Grid.Row="1" Padding="0">
             <ListView.ItemTemplate>
                 <DataTemplate>
-                    <Border BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="0,0,0,1" Padding="8">
-                        <!-- row content -->
-                    </Border>
+                    <Border BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="0,0,0,1" Padding="8"> <!-- row --> </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
     </Grid>
 </Border>
 
-<!-- Toolbar (Add New/Refresh, search, or pagination): same shaded Border on every one -->
 <Border Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
         BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}" BorderThickness="1" CornerRadius="4" Padding="8">
     <StackPanel Orientation="Horizontal" Spacing="8"> <!-- buttons/fields --> </StackPanel>
 </Border>
 ```
 
-`ControlStrokeColorSecondaryBrush`/`SolidBackgroundFillColorSecondaryBrush` are theme resources, so the
-border/shade follow the app's light/dark theme automatically instead of a hardcoded color — no custom
-resource dictionary needed.
+- **Do not use the `Card*` brushes** (`CardBackgroundFillColorDefaultBrush`, `CardStrokeColorDefaultBrush`): they are translucent tints meant to sit on another surface (`#B3FFFFFF` and about 6% black in Light) and show no shading on a plain page. `SolidBackgroundFillColorSecondaryBrush` (`#EEEEEE` Light / `#1C1C1C` Dark) and `ControlStrokeColorSecondaryBrush` (`#29000000` / `#18FFFFFF`) are opaque and visible. Check hex/alpha in the theme dictionary, not the resource name.
+- **The row that bounds the boxed `ListView` must be `Height="*"`, not `Auto`**, all the way up to where the page has room. With `Auto` the `ListView` grows to show every row and, on a page with no `ScrollViewer`, pushes the pagination bar off the bottom without any error.
 
-### Pitfall 1: the Fluent2 `Card*` brushes are the wrong choice here — they're invisible on a plain page
+## Find a control's real template
 
-The natural first reach for "themed card-style shading" is `CardBackgroundFillColorDefaultBrush`/
-`CardStrokeColorDefaultBrush` (the brushes Settings-style "Card" UI uses) — but they render as **no visible
-shading at all** on an ordinary page background, and this genuinely shipped once before being caught by a
-live user report. Confirmed by reading the WindowsAppSDK's own `generic.xaml` (the technique documented
-above, under "grep the WindowsAppSDK's own generic.xaml"): in the Light theme dictionary,
-`CardBackgroundFillColorDefault` is `#B3FFFFFF` — a 70%-opacity **white** fill, meant to sit on top of
-another surface (like `SolidBackgroundFillColorSecondary`), not directly on the page. Layered on an already-
-white page it's indistinguishable from no background at all; `CardStrokeColorDefault` is similarly faint
-(`#0F000000`, ~6% opacity black). Use the fully-opaque pair instead for anything meant to read as visible
-shading against a plain page: `SolidBackgroundFillColorSecondaryBrush` (`#EEEEEE` Light / `#1C1C1C` Dark) and
-`ControlStrokeColorSecondaryBrush` (`#29000000` Light / `#18FFFFFF` Dark, noticeably more visible than
-`ControlStrokeColorDefault`/`CardStrokeColorDefault`/`DividerStrokeColorDefault`, all ~6-9% opacity). The
-general lesson: a "faint tint over another surface" brush and a "flat, opaque, meant-for-the-page" brush are
-different tools, and picking the Card* one for the latter job looks fine in a quick review (or even a zoomed-
-in screenshot) but reads as "no shading at all" at normal viewing — check theme dictionary hex/alpha values
-directly rather than trusting the resource name.
+When a default-template assumption fails, search the SDK's own `generic.xaml` instead of guessing: `find ~/.nuget/packages/microsoft.windowsappsdk.winui -iname generic.xaml` (the `lib/native/Microsoft.UI/Themes/generic.xaml` one). Find `x:Key="Default<Control>Style"`, then the `ControlTemplate`, and read the `Setter`/`TemplateBinding`/literal values on the named parts.
 
-### Pitfall 2: an outer `Grid.RowDefinitions` row of `Auto` around a `*`-sized `ListView` grows unbounded
+## Driving the running app (UI Automation)
 
-Boxing a `ListView` in a `Border` (per the pattern above) adds a wrapping `Grid`/`Border` layer between the
-`ListView` and whatever `Grid.RowDefinitions` row it used to sit in directly. If that **outer** row is left
-(or accidentally changed to) `Height="Auto"` instead of `Height="*"`, the `Border`/inner `Grid`/`ListView`
-all size to their natural content instead of being handed a bounded height — so the inner `*` row (meant to
-make the `ListView` fill available space and scroll) has no space to fill, and the `ListView` instead grows
-to show **every** row unclipped. On a page whose own root `Grid` has no `ScrollViewer`, this pushes anything
-below it (a pagination bar in the next row) off the bottom of the window entirely — it doesn't error, it just
-silently disappears from view, which is exactly what shipped once before a live user report caught it
-("as if the grid was not capped off" was the precise, correct diagnosis). The fix is always to make sure the
-row that directly bounds the `ListView`'s box is `*`, not `Auto`, all the way up the parent chain to
-wherever the page actually has room to constrain it.
+- `System.Windows.Automation` works against an unpackaged WinUI3 app. From PowerShell: `Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes`, `Start-Process -PassThru`, then `AutomationElement.RootElement.FindFirst(Children, PropertyCondition(ProcessIdProperty, $proc.Id))`; find by `NameProperty`/`ControlTypeProperty`; `InvokePattern` clicks; `ValuePattern.Current.Value` reads a TextBox's content (`Current.Name` is only its label). The harness is in `Docs/Verification` (`UiAutomation.psm1`).
+- `AutomationElement.FocusedElement` is system-wide: bring the window forward (`user32!SetForegroundWindow`) and check `Current.HasKeyboardFocus` on a specific element. Never use `SendKeys` (it types into whatever window the person is using); use `InvokePattern`, `ValuePattern`, `TogglePattern`.
+- `ScrollPattern.SetScrollPercent(-1, 100)` scrolls a dialog to its end. A UIA `BoundingRectangle` is the visible (clipped) rectangle, which is how a cut-off row shows in numbers. `CopyFromScreen` screenshots include any window in front.
+- `Find-Name 'Rows per page'` returns the TextBlock beside the box; get the box with `@(Find-Type 'ComboBox')[0]`. `SelectionPattern` gives the selected item; `Expand-El` then `FindAll(Descendants, ListItem)` lists options; the page label is `Find-Like 'Page * of *'`; wait about 3 s after each change.
 
-## `Windows.Storage.Pickers.FolderPicker` can't open at a specific starting directory
+## Paging bar
 
-Its `SuggestedStartLocation` only accepts a fixed `PickerLocationId` enum (Desktop, Downloads,
-ComputerFolder, etc.) — there's no way to point it at an arbitrary path the app already knows about (e.g.
-"reopen where the developer last picked"). For a full starting-directory control, drop to the native
-Win32 `SHBrowseForFolder` (with `BIF_NEWDIALOGSTYLE` for the modern resizable look) via P/Invoke instead —
-its `BFFM_INITIALIZED` callback message lets you set the initial selection explicitly. This sidesteps
-`System.Windows.Forms.FolderBrowserDialog` too, which is simpler but pulls in `UseWindowsForms`, and that
-property conflicts with a WinUI3 project's own XAML `Page` build items (`MC6000` "must include
-PresentationCore, PresentationFramework").
-
-## Self-contained deployment can break anything that compiles code at runtime
-
-See the self-contained-deployment skill for the general principle; the concrete trigger in a WinUI3 app is
-`WindowsAppSDKSelfContained` (the Windows App SDK's own native runtime) being a **separate** setting from
-`SelfContained` (.NET's own runtime bundling) — you can and often should set the former `true` and the
-latter `false`. Also note: once `SelfContained=false`, a plain `dotnet build`/`dotnet run` without an
-explicit `-p:Platform=x64` (or a matching `<RuntimeIdentifier>` set explicitly, singular not plural) may
-fail the Windows App SDK's own build targets with `"WindowsAppSDKSelfContained requires a supported
-Windows architecture."` — fix by using `<RuntimeIdentifier>win-x64</RuntimeIdentifier>` (singular) rather
-than `<RuntimeIdentifiers>win-x64</RuntimeIdentifiers>` (plural, publish-oriented) so a single RID is
-always resolved even for an ordinary build.
-
-## UI Automation can drive an unpackaged WinUI3 app from outside, for real verification
-
-Classic `System.Windows.Automation` (`UIAutomationClient`/`UIAutomationTypes`, the same API WPF apps are
-automated with) works against a running WinUI3 app's window with no special setup — WinUI3 exposes
-standard UIA peers. From PowerShell:
-```powershell
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-$proc = Start-Process -FilePath $exePath -PassThru
-$mainWin = [System.Windows.Automation.AutomationElement]::RootElement.FindFirst(
-    [System.Windows.Automation.TreeScope]::Children,
-    (New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ProcessIdProperty, $proc.Id)))
-```
-From there, `FindFirst`/`FindAll` with a `NameProperty`/`ControlTypeProperty` condition locate buttons,
-text fields, etc.; `InvokePattern` clicks buttons; `ValuePattern.Current.Value` reads a TextBox's actual
-displayed value (its `Current.Name` is just its accessible label, not its content). This is genuinely
-useful for confirming a fix actually works end-to-end (e.g. "does this dialog really show the previously
-saved value") rather than reasoning about it from source alone.
-
-Two sharp edges: `AutomationElement.FocusedElement` is **system-wide**, not scoped to your process — after
-killing/relaunching a test instance, bring the target window to the foreground first
-(`user32.dll!SetForegroundWindow`) and prefer checking `element.Current.HasKeyboardFocus` on a specific
-element scoped to your own window over trusting the global focused-element pointer. And avoid
-`System.Windows.Forms.SendKeys` for key input in this kind of test — it injects real system-wide keyboard
-input and can land on whatever window the person at the keyboard is actually using; drive the target
-through UIA's own patterns (`InvokePattern`, `ValuePattern`, `TogglePattern`) instead, which stay scoped to
-the element you found.
-
-## A `ComboBox`'s drop-down chevron can vanish or double up — caused by `HorizontalAlignment="Stretch"` on the `ComboBox` itself, not an SDK/template bug
-
-In an unpackaged, self-contained deployment (`WindowsPackageType=None`, `WindowsAppSDKSelfContained=true`),
-`ComboBox`es with `HorizontalAlignment="Stretch"` set explicitly lost their drop-down chevron on some
-screens — the control was always a real, fully functional `ComboBox` (confirmed via UI Automation the whole
-time — `ControlType.ComboBox`, opens and selects correctly), only the chevron glyph's own rendering was
-affected — and, after an earlier fix attempt added a second always-visible glyph on top of the stock one
-without removing the stock element, a genuine double arrow on other screens. Same build, same generated
-`ComboBox` markup pattern, different visible outcome per screen.
-
-This was first chased as an SDK/template rendering bug: a long investigation found (and "fixed") a chain of
-narrow-column quirks, `AnimatedIcon.FallbackIconSource` not engaging on an absent `Source`, icon-font glyphs
-never rendering, only literal ASCII text rendering reliably — and shipped an elaborate app-wide
-`<Style TargetType="ComboBox">` override in `App.xaml` (a verbatim copy of the SDK's own
-`DefaultComboBoxStyle`, with a widened glyph column, the stock `AnimatedIcon` forced to `Opacity="0"`, and a
-hand-added `TextBlock` "v" as a replacement glyph) to work around it.
-
-**All of that was unnecessary.** The actual, much simpler cause, found by the project owner directly:
-`HorizontalAlignment="Stretch"` on the `ComboBox` itself. Removing that one attribute — with `App.xaml`
-reverted to a completely stock `XamlControlsResources` merge and no custom `ComboBox` style at all — fixed
-every affected screen, reverified live via UI Automation + zoomed screenshots on three separate dialogs,
-including the exact one that had shown the double arrow.
-
-**Fix: never set `HorizontalAlignment="Stretch"` on a `ComboBox`.** Leave it at its default (sized to
-content) or set an explicit `Width`/`MinWidth` if a wider box is wanted. `CodeGenNew`'s WinUI3 templates
-(`Templates/WinUI3_DetailScreen_v1.tt`, `Templates/WinUI3_DetailMasterScreen_v1.tt`) generated every
-foreign-key `ComboBox` with `HorizontalAlignment="Stretch"` baked in; this was removed from both templates
-(2026-09-28) so newly generated screens don't hit this. A hand-built WinUI3 screen (or one from another
-codegen tool) should drop it too.
-
-The exact mechanism (why `Stretch` specifically corrupts the native `AnimatedIcon` chevron — a
-clipping/measure interaction, a content-vs-glyph layout race in the stock template) is still not understood,
-only empirically confirmed. If this recurs in a different project, **check for `HorizontalAlignment="Stretch"`
-on the affected `ComboBox` first** — remove it and re-test — before reaching for any custom template
-override; a custom `App.xaml` `ComboBox` style should not be needed at all.
-
-
-## A ContentDialog's width is capped by two theme resources — `MinWidth`/`MaxWidth` on the dialog do nothing
-
-Symptom: a dialog stays about 550 px wide no matter what. Setting `MinWidth="800"` through `MinWidth="2400"`
-(and `MaxWidth`) on the `ContentDialog`, or `MinWidth` on the `ScrollViewer` inside it, has no effect (a
-`MinWidth` that is *smaller* than the default does take effect, which makes it look like the property works).
-Cause: the default `ContentDialog` template sizes its container from the theme resources
-`ContentDialogMinWidth` (about 320) and `ContentDialogMaxWidth` (about 548), not from the dialog's own
-properties. Content wider than that cap is clipped, which also pushes a wide grid's right-hand columns (an
-Edit/Delete column, say) out of sight. Fix: override the resources on the dialog itself.
-
-```xml
-<ContentDialog ...>
-    <ContentDialog.Resources>
-        <x:Double x:Key="ContentDialogMinWidth">320</x:Double>
-        <x:Double x:Key="ContentDialogMaxWidth">1400</x:Double>
-    </ContentDialog.Resources>
-
-    <ScrollViewer MinWidth="560" MaxHeight="680" HorizontalScrollBarVisibility="Auto">
-        ...
-    </ScrollViewer>
-</ContentDialog>
-```
-
-With the cap raised, the dialog sizes to its content up to the window, so the inner `ScrollViewer`'s own
-`MinWidth` is now the knob for "make it wider", and `HorizontalScrollBarVisibility="Auto"` is the safety net
-for content that is still wider than the window. Verified in the running app (a Detail dialog and a
-master/detail dialog with a 6-column child grid).
-
-## `ListView` row behavior: `SelectionMode="None"` and `IsEnabled="False"` both look like bugs to users
-
-Two mistakes that look reasonable when a grid is meant to be "just a display":
-- **`SelectionMode="None"`** still lets the `ListView` take keyboard focus on a click, but draws no selection.
-  Users report that clicking a row "does nothing", yet pressing the down arrow then jumps to the row *after*
-  the one they clicked, and the up arrow does nothing until the down arrow has been pressed once. Use
-  `SelectionMode="Single"` for any grid a person clicks in: the click highlights the row and the arrow keys
-  start from it. (Buttons inside the row template, such as Edit/Delete, still work with `Single`.)
-- **`IsEnabled="False"`** on a `ListView` to make it read-only turns the whole grid grey and swallows every
-  click, so it reads as broken. If rows should open something, set `IsItemClickEnabled="True"` and handle
-  `ItemClick`; the row's data item arrives as `e.ClickedItem`, so give each row object a reference to the
-  entity it was built from (an `Entity` property) instead of trying to recover it from the display strings.
-
-## Drilling from a dialog into another dialog: hide, show the child, and do not reopen the parent
-
-The one-open-at-a-time rule (section above) applies to a click inside a dialog's grid that should open another
-dialog. Pattern that works: in the `ItemClick` handler call `Hide()` on the current dialog, then
-`await new ChildDialog(...) { XamlRoot = XamlRoot }.ShowAsync()`. Do **not** make the child's closing
-reopen the parent: `Hide()` resolves the parent's own `ShowAsync()` immediately, which also unblocks any
-*ancestor* dialog awaiting it. Three or more levels deep (list, then dialog, then dialog, then dialog) two
-dialogs end up calling `ShowAsync()` at once, and the process dies with a native fault in
-`Microsoft.UI.Xaml.dll` (not a catchable exception). Closing the child simply returns to the page underneath.
-
-## `xmlns:` prefix collisions: one prefix, one namespace per XAML file
-
-A page that already declares `xmlns:local="using:MyApp.ViewModels"` for a `DataTemplate`'s `x:DataType` cannot
-also use `local:` for a control from `MyApp.Views`. The control fails to resolve with
-`WMC0001: Unknown type 'PaginationBar' in XML namespace 'using:MyApp.ViewModels'` — the message names the
-*wrong* namespace, which is the clue. Declare a second prefix (`xmlns:views="using:MyApp.Views"`) and use that.
-
-## Smaller things worth knowing
-
-- **`NumberBox.Value` is a `double`.** `{x:Bind ViewModel.Year, Mode=TwoWay}` against a `string` or `int`
-  property does not bind; use a `double` (or `double?`) property, a converter, or bind `Text`. An empty
-  `NumberBox` yields `NaN`, so check `double.IsNaN` before using the value, and convert to `decimal` for
-  money. (From the documented API; not yet confirmed in a running app.)
-- **`CurrencyFormatter` cannot be declared in XAML.** `NumberBox.NumberFormatter` takes a
-  `Windows.Globalization.NumberFormatting` formatter object, so create it in code-behind
-  (`new CurrencyFormatter(CurrencyIdentifiers.USD) { FractionDigits = 2 }`). (Not yet confirmed in a running app.)
-- **`CsWinRT1028` ("class is not marked partial")** is reported for a type in a WinUI3 project that is
-  reachable from WinRT-projected types, for example a `DbContext` subclass; declaring it `partial` is the
-  fix the warning asks for. (Not yet confirmed that it clears the warning.)
-- **A generated XAML file that compiles in one project can fail in another over a comment.** When XAML is
-  produced by a code generator, check the *generator's own* comments for `--` too; one slipped into a
-  template's XAML comment and surfaced only as `Xaml Internal Error error WMC9999: An XML comment cannot
-  contain '--'` in the consuming project, with the line and position of the comment.
-- **Putting a hand-written helper in a generated project:** a small shared `UserControl` such as a
-  Previous/Next pagination bar has no per-table content, so a code generator can write it as an ordinary
-  file next to the pages that use it; every run rewrites the identical file.
-
-## Number and currency boxes: an inline `NumberBox` needs about 150 px beyond its digits, and a `CurrencyFormatter` will not read a plain number
-
-- **Width.** `SpinButtonPlacementMode="Inline"` puts two spin buttons and, while focused, a clear ("x") button inside the control. Sized to the
-  digits plus only the spin buttons (about 80 px) the text area is clipped to nothing: clicking works, typing appears to do nothing, and after
-  clearing the box a click elsewhere "sets it to the maximum" because the invisible digits pushed the value past `Maximum`. About 150 px beyond the
-  digits (two digits wide: roughly 170 px) types normally. Test it with a screenshot of a value typed in, not by reading the XAML.
-- **Currency typed without the symbol is silently dropped.** `CurrencyFormatter` as a `NumberBox.NumberFormatter` formats `$6468.84` but its parser
-  rejects `7777.77`, so the box reverts. Fix: a small managed class that implements both `INumberFormatter2` and `INumberParser`, formats with the
-  `CurrencyFormatter` and parses with the currency formatter first, then a `DecimalFormatter` (`ParseDouble`, `ParseInt`, `ParseUInt` each
-  `_currency.X(text) ?? _plain.X(text)`). Declare it `partial` (CsWinRT). (Compiles and is in use; reading a plain number is awaiting a click-through.)
-
-
-## A classic `{Binding}` to an empty string shows the parent object's type name
-
-In an `ItemsControl` whose `DataTemplate` is `<TextBlock Text="{Binding}" />` over a `List<string>`, an **empty-string item** prints the *row object's* `ToString()`
-(for example `InvoiceSystem.App.` clipped to the cell width) instead of nothing: with an empty string as its data the template falls back to the inherited DataContext.
-It only appears once a column has empty values, so it looks like a data bug. Fix: `<DataTemplate x:DataType="x:String"><TextBlock Text="{x:Bind}" /></DataTemplate>`.
-
-## `CalendarDatePicker`: date as `DateTimeOffset?`, no clear button, no time of day
-
-- `Date` is a nullable `DateTimeOffset`; `DateFormat="{}{month.integer}/{day.integer}/{year.full}"` (the leading `{}` escapes the braces in XAML) sets how it reads.
-  A ViewModel property of that type binds two-way with `{x:Bind}`; convert with `new DateTimeOffset(dateTime)` in and `.Value.Date + storedTimeOfDay` out so editing a
-  date never zeroes a stored time.
-- The control has **no clear button**: a nullable date needs a separate "Clear" button that sets the property to null.
-- Do not set `MinDate`/`MaxDate` from a project-wide year range if existing rows can hold older dates; a limited picker rejects them.
-
-
-## Several dialogs, one DbContext: `ShowAsync()` returns before the dialog's own work is done
-
-A generated app shares one `DbContext` (not thread-safe). Two "second operation was started on this context" crashes came from `ContentDialog.ShowAsync()` returning too early:
-- It returns the moment the dialog **closes**, which can be before the dialog's own `async` load (started from `Loaded`) has finished. Keep that load as a `Task` field (`Loaded += (_, _) => _loading = ViewModel.LoadAsync();`) and give the dialog a
-  `ShowAndWaitAsync()` that awaits `ShowAsync()` and then `_loading`; callers that are about to reload the list use it.
-- It also returns when the dialog `Hide()`s itself to open a child dialog. The parent's `ShowAndWaitAsync()` must additionally await a `TaskCompletionSource` that the drill-down handler sets when the child dialog is done (`finally { _drillDown.SetResult(); }`), or the page reloads
-  on the shared context while the child dialog is still loading.
-
-## Keep the error `InfoBar` outside a dialog's `ScrollViewer`
-
-A validation message placed at the top of a scrolling dialog is out of sight once the person scrolls down, so "Save does nothing". Put the `InfoBar` in a `StackPanel` **above** the `ScrollViewer`.
-
-## A `ListView` inside a `ScrollViewer`: the last row can be cut off
-
-The `ListView` sized itself from its rows' content while every `ListViewItem` container has a 40 px minimum height, so a short-row grid came out a fraction of a row too short (UIA showed the last `ListViewItem` clipped, e.g. 29 of 42 px). Fixes that together worked: an `ItemContainerStyle` for
-`ListViewItem` (`BasedOn="{StaticResource DefaultListViewItemStyle}"`) with `MinHeight` 0, and a little bottom `Padding` on the content `StackPanel` inside the dialog's `ScrollViewer`. Note that a UIA `BoundingRectangle` is the *visible* (clipped) rectangle, which is how the cut-off shows up in numbers.
-
-## `TabView` for a long form
-
-`<TabView IsAddTabButtonVisible="False" TabWidthMode="SizeToContent" CanReorderTabs="False" CanDragTabs="False" SelectedIndex="0">` with `<TabViewItem Header="..." IsClosable="False">` pages works inside a `ContentDialog` (give each page's `ScrollViewer` a fixed `Height` in a single-form dialog; the error bar stays above the `TabView`).
-A `&` in a header must be written `&amp;`. A `NumberBox` for a decimal column also needs a code-behind `DecimalFormatter` (`FractionDigits` = the column's scale, an `IncrementNumberRounder`) to show `77.00`; the plain `NumberBox` shows `77`.
-
-## Driving the running app for a check (what worked)
-
-UI Automation as in the section above, plus: `ScrollPattern.SetScrollPercent(-1, 100)` scrolls a dialog's `ScrollViewer` to the end; `CopyFromScreen` of the window rectangle gives a screenshot (do it only when the person's own windows are not in front, e.g. an open Visual Studio shows up in it);
-use the freshly built `bin\x64\Debug\...` exe, not an older `bin\Debug\...` one (the stale one shows an old UI and misleads).
-
-## Input controls that stop bad data (see the ui-conventions skill for the rules)
-
-How each choice is built in WinUI3, learned on the CodeGenNew Project Settings screen:
-
-- **True/false:** `CheckBox` with `IsChecked="{x:Bind IsChecked, Mode=TwoWay}"` bound to a `bool` property that reads and writes the stored string ("true"/"false").
-- **Up to three choices:** `RadioButtons` with `ItemsSource`, `SelectedItem="{x:Bind SelectedChoice, Mode=TwoWay}"` and an `ItemTemplate` (a `DataTemplate` with `x:DataType` of the choice record, kept in the dialog's `Resources` and referenced with `{StaticResource}`). The selected-item property must tolerate a null set (the control sets null when the source resets) and return null for a stored value not on the list.
-- **More than three:** `ComboBox` (not editable) with `DisplayMemberPath="Label"` and the same `SelectedItem` binding.
-- **Any of a list:** a `DropDownButton` whose `Flyout` holds an `ItemsControl` of `CheckBox`es; bind the button `Content` to a summary string ("Api, WinUI3"). Raise `PropertyChanged` for the summary when the stored value changes. Guard against feedback (a flag around the loop that sets each check box from the loaded value) so loading does not rewrite the value.
-- **Whole number:** `NumberBox` with `Minimum`, `Maximum`, `SpinButtonPlacementMode="Compact"`, `ValidationMode="InvalidInputOverwritten"` and `Value="{x:Bind NumberValue, Mode=TwoWay}"` on a `double` property where `NaN` (empty box) means blank. `x:Bind` converts `bool` to `Visibility` by itself, so `Visibility="{x:Bind IsNumber}"` needs no converter; one `DataTemplate` can hold every control kind and show the one that applies.
-- **Read-only text:** `TextBlock` (in a `Border` for a panel), never a read-only `TextBox`: a `TextBox` gets a tab stop and looks editable. If the dialog is forced to `RequestedTheme="Dark"`, black text needs a light `Border` background or it is invisible.
-- **Tabs built from data:** `TabView.TabItemsSource` with templates is unreliable for content; building the `TabViewItem`s in the constructor from a list of (title, description, rows) is simple and works. Set `IsClosable=false` on each.
-
-## A paging bar with a page-size box, and checking it with UI Automation (2026-10)
-
-- **View model:** `PageSize` is an `[ObservableProperty]` (not a const), `TotalRows` and `HasLoaded` notify `PageLabel`, and `PageLabel` reads `"Nothing found."` when loaded with no rows, else `"Page 2 of 5 (98 rows)"`. After the search, if the page came back empty with `totalCount > 0` and `PageNumber > TotalPages`, set `PageNumber = TotalPages` and search again: a delete of the last row of the last page otherwise shows "Page 3 of 2" and an empty grid.
-- **The ComboBox inside a UserControl:** set `ItemsSource` and `SelectedItem` in the constructor after `InitializeComponent()` instead of `x:Bind` in XAML (the selection set before the binding fills the list is ignored); update `SelectedItem` from the dependency property's changed callback; `SelectionChanged` also fires for that programmatic selection, so raise the page-size event only when the selected size differs from the property.
-- **Two templates writing the same file** (`PaginationBar.xaml` from the master screen and the master-detail screen) must stay identical: a test that cuts the same section out of both templates and compares them catches drift.
-- **Build the x64 output before driving the app:** `dotnet build <App>.csproj -p:Platform=x64`. The sample's `Regenerate.sh` builds the default platform, so the exe under `bin\x64\Debug\...` can be stale (the label still read "Page 1 of 3" until the explicit build).
-- **UI Automation:** `Find-Name 'Rows per page'` returns the **TextBlock** beside the box first; get the box with `@(Find-Type 'ComboBox')[0]`. `GetCurrentPattern(SelectionPattern)` gives the selected item (`20`), `Expand-El` then `FindAll(Descendants, ControlType.ListItem)` lists the options and `Select-El` on one picks it. The page label is found with `Find-Like 'Page * of *'`; wait about 3 s after each change.
-
-### A live paging test for a generated list page (2026-10)
-
-`CodeGenNew\Docs\Verification\Test-WinUI3Paging.ps1` is the worked example: scratch copy of the SQL Server sample, extra rows seeded so the last page holds a single row at a page size of 10 (rows % 10 = 1), the app pointed at the copy by editing the `appsettings.json` next to the exe (put back in `finally`), then `Set-PageSize`, `Invoke-El (Find-Name 'Next')` to the last page, delete through the confirmation dialog, and assert the label. The dialog's primary button has the same name as the row's (`Delete`): find it as the Delete button whose `GetRuntimeId()` was not in the list taken before the click. Seed rows that sort last and have no dependants, so the delete is allowed. The script's default server is `localhost`; a machine name in a repository file fails the leftover-names test.
+- `PageSize` is an `[ObservableProperty]`; `TotalRows` and `HasLoaded` notify `PageLabel`, which reads `"Nothing found."` when loaded with no rows, else `"Page 2 of 5 (98 rows)"`.
+- After the search, if the page is empty with `totalCount > 0` and `PageNumber > TotalPages`, set `PageNumber = TotalPages` and search again; otherwise deleting the last row of the last page shows "Page 3 of 2" and an empty grid.
+- Two templates writing the same file (`PaginationBar.xaml`) must stay identical: a test that cuts the section out of both and compares them catches drift.
+- A live paging test: `Docs/Verification/Test-WinUI3Paging.ps1` (scratch copy, extra rows so the last page holds one row, point the app at the copy through `appsettings.json` next to the exe and restore it in `finally`, page to the end, delete through the confirmation dialog, assert the label). The dialog's primary button has the same name as the row's (`Delete`): take the Delete button whose `GetRuntimeId()` was not in the list taken before the click.
