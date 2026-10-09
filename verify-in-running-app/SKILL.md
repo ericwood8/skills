@@ -103,3 +103,14 @@ Grid loads with real names/dates; edit form pre-fills correctly (dates, booleans
 ### Prove a live check can fail (2026-10)
 
 A check that has only ever passed proves little. After it passes, switch the fix off in the code under test (here `if (false && ...)` on the step-back in the generated view model), rebuild, run the check again and look for the failure you expect (`Page 7 of 6 (60 rows)`), then restore the file from a copy taken first and rebuild. Say in the notes that this was done. Remove your own scratch `.bak` files from the instance backup folder when the folder lets you (`rm` worked there); otherwise tell the user where they are.
+
+## Proving a refactor changed no behavior (2026-10)
+
+When the change is "same behavior, fewer lines", the live test script is the proof, but only for what it checks. Before refactoring, look for what it does not check (here: nothing about roles) and write those checks first. Then run the *same script* against the code before and after:
+
+1. `git worktree add <scratch>/oldrepo HEAD` (the last commit), build it (`dotnet build`; a script run with `-SkipServer` does not build and the API "did not start").
+2. Run the script with the worktree as the server repo (`run-all-tests.ps1 -ServerRepo <oldrepo>`): it must pass on the old code. A check that fails there is wrong or describes a bug you meant to fix; decide which.
+3. Run it on the new code. Same count, all pass.
+4. `git worktree remove --force <oldrepo>` and `git worktree prune`.
+
+Roles are checked best with real sign-ins: create an Employee, a Manager and an HR user through the admin API for three employees (a manager, one of their reports, an unrelated one), have the admin make a row for each, then assert 403 / 200 per role on every owned route. Capture the `Location` header in the script's `Call` helper (`$r.Headers['Location']`) so create answers can be checked too.
