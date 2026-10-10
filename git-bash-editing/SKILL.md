@@ -7,7 +7,7 @@ description: ALWAYS read before writing a script or a file body from Git Bash (n
 
 ## The rule
 
-**Never carry a file body or a script in a Bash heredoc.** Use Bash to run things, not to carry contents.
+**Do not carry a large file body or script in a Bash heredoc.** Use Bash to run things. A small or medium heredoc (a short script or edit, up to about 40 lines) is fine when it holds no apostrophe, backslash, backtick or `$` that must reach the file; larger bodies fail ("unexpected EOF", mangled escapes) and go through Write.
 
 | Need | Do this |
 |---|---|
@@ -16,7 +16,7 @@ description: ALWAYS read before writing a script or a file body from Git Bash (n
 | The same replacement in many files | a script file made with Write: raw strings, `assert text.count(old) == 1`, read and write with `newline=''` |
 | A short command with no `'`, `\`, backtick or `$` | Bash is fine |
 
-A heredoc longer than about 5 lines, or holding any apostrophe, backslash, backtick or `$`, belongs in a file made with Write. After **every** scripted edit, `grep -n` or `sed -n` the changed line before building; a script that "ran" proves nothing.
+A heredoc longer than about 40 lines, or one whose text needs an apostrophe, backslash, backtick or `$` to survive, belongs in a file made with Write (the Edit tool for a short block). After **every** scripted edit, `grep -n` or `sed -n` the changed line before building; a script that "ran" proves nothing.
 
 ## Shell rejections and rewrites
 
