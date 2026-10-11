@@ -135,3 +135,12 @@ A feature switch that only takes effect on the next generate, restart or rebuild
 explanation line. Saving a setting does nothing by itself, and a user who ticks a box and sees no change
 assumes the feature is broken. Where a control depends on another (a "Stacks" list that decides what is
 generated), say so beside it, and state what a blank value does.
+
+## 12. Required fields get a red asterisk, and Save stays enabled
+
+- Put a literal `*` after the caption of every field the person must fill in: shown on the form, editable, NOT NULL, and not a yes/no box (it always holds a value) or a value the system writes. Colour it red (about #b00020 on white, 7:1; the asterisk shape means colour is not the only cue).
+- Mark it twice: the visible `*` is hidden from assistive technology (`aria-hidden="true"`; WinUI3 skips it because the header is not the control), and the control itself says it is required (the native `required` attribute, `aria-required` only as a fallback; WinUI3 `AutomationProperties.IsRequiredForForm="True"`). Do not also print the word "required" beside each field: it is announced twice.
+- A legend line ("* required") is optional; the project owner chose none for the generated screens.
+- Do **not** disable Save until the required fields are filled. A disabled button leaves the tab order, gives no reason, and a screen-reader user cannot find the button they are told to use. Keep Save enabled and refuse on press, with a message, and move focus to the first missing field. If a disabled Save is ever wanted: `aria-disabled="true"` so it stays focusable, plus a visible hint naming the empty fields.
+- One rule decides which fields are required, for every screen and every technology, and the mark and the check read it, so the star never disagrees with the check. A setting can switch the marks off; the fields stay required.
+- Check it on the screen where the mark lives: the detail form reached with Edit (or Add New), not the list page. Compare the marked captions with the NOT NULL columns of the table.
