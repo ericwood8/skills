@@ -137,3 +137,13 @@ description: Rules for writing, changing and verifying CodeGenNew T4 (Mono.TextT
 - Refactoring one rule out of many templates: list each difference between the copies as a question (on purpose?); snapshot the sample projects' output before and after and `diff -rq`. Zero differences is the goal and each one is a chosen unification, reported to the user. Add a Core test of the model and a cross-stack test that renders each stack for one table and compares what it edits.
 - A test that renders a template without a project gets no table lists: give it a `ProjectSettings` naming the table (`NoApiTables=SY_Role`).
 - Test samples leave `ReferencingTableColumns` empty, so a rule needing the child's columns goes in the one template that needs it.
+
+## Speed, the disk cache and generated-code warnings (2026-10)
+
+- A template compile is a compiler process (about 1 s); everything else is cheap (Core calls are microseconds, a warm whole-sample generation about 1.4 s). Do not tune Core before looking at compiles and sample builds. Use `[GeneratedRegex]` rather than `RegexOptions.Compiled`.
+- `TemplateCache` compiles each template once and keeps the result on disk, keyed by template text, the public surface of Core and the runtime (`CODEGENNEW_TEMPLATE_CACHE` names the folder, `off` disables). A change inside a Core method body keeps entries valid; a changed signature, constant or enum value compiles again. Tests that need a real compile use `TemplateCache.WithoutDisk()` or `InFolder(temp)`; tests that edit a template copy run it through `Repo.Cache`. Call `Prepare(paths)` early so the other cores compile while the first templates run.
+- String literals and NOT NULL initializers for generated C# come from `CSharpText` (`Escape`, `Quote`, `NotNullInitializer`); never paste a local `Str`/`Esc` helper into a template.
+- `required` plus `[SetsRequiredMembers]` does not satisfy CS8618: a NOT NULL string property gets `= "";` and a NOT NULL `byte[]` gets `= [];`. Check a regenerated sample builds with 0 warnings, not only 0 errors.
+- Table lists such as "no repository" come from the project (`Project.NoRepositoryFor`), never from an array in a template.
+- After `git checkout`, templates are CRLF again: a script that edits them normalises `\r\n` first and asserts exactly one match.
+- A cache that outlives a run must not hold the last model: remove session values after each `Process()`.
