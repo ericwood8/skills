@@ -19,6 +19,7 @@ This repo is the version-controlled source of truth. Claude Code actually loads 
 | [msbuild](msbuild) | MSBuild/.csproj gotchas — XML-comment double-hyphen trap, culture-code false positives, RuntimeIdentifier singular-vs-plural, `.slnx` vs `.sln` |
 | [self-contained-deployment](self-contained-deployment) | Copy-and-go C# desktop/CLI deployment philosophy — no installer, auto-seeded config, embedded assets |
 | [codegen-t4-templates](codegen-t4-templates) | Writing/verifying T4 (Mono.TextTemplating) code-generator templates that reproduce hand-written files |
+| [odata-generated-grids](odata-generated-grids) | CodeGenNew OData/REST grids in React, Angular and Blazor: `$select` from chosen columns, dropping sorts and filters with a hidden column, owner scope, and how to prove a grid change live |
 | [efcore-aspnet-review](efcore-aspnet-review) | Known defect patterns in EF Core entities and ASP.NET minimal-API CRUD endpoints |
 | [bannerlord-decompile](bannerlord-decompile) | Decompiling a Bannerlord mod's DLLs with ILSpy and getting the result recompiling |
 
