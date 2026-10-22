@@ -57,6 +57,10 @@ In SQL and generated text where a constant is not possible, put the meaning once
 - Do not write a document, summary file or notes file unless asked. Tests that show behaviour beat prose that describes it.
 - When code changes, fix or delete the comment beside it in the same edit. A wrong comment is worse than none.
 
+## 7. No counts in documentation
+
+Do not write how many tests, templates, samples, stacks, files, checks or rows there are, in numerals or words ("about 1,800 tests", "One hundred and thirty-two templates", "eleven samples", "55 checks"), in READMEs, guides, specs or notes. The numbers change with nearly every change, go stale at once, and cost time to keep right. They also tell the reader little, because the text usually lists the items themselves. Name or list the things, or say "the templates", "the sample applications", "the test suite". A count is fine only when it is part of the rule itself ("a password of at least 8 characters", "capped at 5000 rows") or in a log of finished work that records what was true on that date. When you edit a document and meet an existing count of this kind, remove it in the same edit; do not update it.
+
 ## Quick check before finishing an edit
 
 1. Any digit after the word section, item, page, step or line? Remove it.
@@ -64,6 +68,7 @@ In SQL and generated text where a constant is not possible, put the meaning once
 3. Any `--` or em dash in prose? Rephrase.
 4. Any regex or odd expression without a purpose line? Add one.
 5. Any bare error number? Name it.
+6. Any count of tests, templates, samples or files in a document? Remove it.
 
 ## Scope and exceptions (decided by the owner)
 
