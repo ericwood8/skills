@@ -13,6 +13,8 @@ description: Safety rules for running ad hoc SQL against MySQL, plus concrete go
 4. **Row cap.** Append `LIMIT 10000` to ad hoc SELECTs.
 5. **Credentials.** Never echo a full connection string or password; redact (`Password=REDACTED`). `-p'password'` inline triggers the CLI warning "Using a password on the command line interface can be insecure"; the value still must not be echoed.
 
+**Tool:** `python C:/Github/tools/sql_run.py --engine mysql --host <host> --user <user> --db <db> -e "<one statement>"` enforces rules 2 to 5 (refuses a second statement, 10 s / 30 s timeouts, 10000 row stop, password only via `MYSQL_PWD`, redacted output) and notes a non-idempotent statement. `--via <container>` borrows a running container's `mysql` client for any host. Read its docstring for the flags (`--read-only`, `--allow-multi` for a reviewed seed file, `--dry-run`).
+
 ## Connecting
 
 - **No Windows Integrated Auth equivalent:** plan username/password auth in every environment. Use alphanumeric-only passwords for anything passed through shell commands (special characters broke CLI connections through shell escaping).

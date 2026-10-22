@@ -40,8 +40,10 @@ aws lightsail get-container-log --service-name <service> --container-name <name>
 4. **No per-container DNS.** All containers in one deployment share a single network namespace (pod-style). Reach a sibling via `localhost:<port>`, never its container name — that only works in Docker Compose.
 5. **Only one container per deployment can be public** (`publicEndpoint`). Multiple logically-public services (SPA + API) need a reverse-proxy container (nginx) as the sole public endpoint, routing internally over `localhost`. Side effect: same-origin, so no CORS needed.
 6. **No `depends_on` equivalent** — containers start in parallel with no ordering guarantee. Anything that resolves a sibling hostname at startup (e.g. nginx `proxy_pass`) needs lazy/per-request resolution, not a literal target, or it can crash before a sibling is even up.
-7. **Two different `state` fields**: the container *service's* state (`READY` — there is no "RUNNING") vs. an individual *deployment's* state (`ACTIVATING` → `ACTIVE`/`FAILED`, superseded ones go `INACTIVE`). `ACTIVATING` can legitimately sit for several minutes.
+7. **Two different `state` fields**: the container *service's* state (`RUNNING` while it serves a deployment, seen live) vs. an individual *deployment's* state (`ACTIVATING` → `ACTIVE`/`FAILED`, superseded ones go `INACTIVE`). A `RUNNING` service says nothing about the new deployment, so poll the deployment. `ACTIVATING` can legitimately sit for several minutes.
 8. **No IaC path fits this well** — it's CLI-managed (`push-container-image` + `create-container-service-deployment`), not Terraform/CloudFormation-first for a small service like this.
 9. **Secrets live in plain env vars inside `containers.json`** — there's no secrets-manager integration at this tier. Gitignore the real file; keep a redacted `.example` sibling checked in for shape.
+
+In the Critical Viewer repo the whole sequence is scripted: `python tools/deploy/lightsail/lightsail_deploy.py status | push | deploy | logs` (checks the rules above, picks the highest numeric image version, polls the deployment state, prints redacted logs on failure; run `deploy --dry-run` first).
 
 Full symptom → cause → fix detail (exact error text as actually seen) for every rule above: see [REFERENCE.md](REFERENCE.md).

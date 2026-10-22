@@ -112,9 +112,9 @@ A bare literal `proxy_pass http://backend-api:8080;` fails hard at startup if re
 
 ## 7. Two different `state` fields
 
-**Symptom:** Confusion between `"state": "READY"` on the service and `"state": "ACTIVATING"`/`"ACTIVE"`/`"FAILED"`/`"INACTIVE"` on deployments — there is no `"RUNNING"` state anywhere in this API, despite it being an intuitive guess.
+**Symptom:** Confusion between `"state": "RUNNING"` on the service (seen live on a healthy service) and `"state": "ACTIVATING"`/`"ACTIVE"`/`"FAILED"`/`"INACTIVE"` on deployments — a service that reads `RUNNING` can still be serving the previous deployment while the new one is activating or has failed.
 
-**Cause:** `get-container-services` returns the container *service's* own state (`READY` when the service itself is up and serving *some* deployment) separately from `currentDeployment.state` / `nextDeployment.state`, which track the specific deployment version's rollout.
+**Cause:** `get-container-services` returns the container *service's* own state (`RUNNING` when the service itself is up and serving *some* deployment) separately from `currentDeployment.state` / `nextDeployment.state`, which track the specific deployment version's rollout.
 
 **Fix:** When waiting for a new deploy to take effect, poll the *deployment* state, not the service state:
 ```bash

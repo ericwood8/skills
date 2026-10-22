@@ -13,6 +13,8 @@ description: Safety rules for running ad hoc T-SQL against Microsoft SQL Server,
 4. **Row cap.** Ad hoc inspection SELECTs use `SELECT TOP 10000 ...` (or `OFFSET 0 ROWS FETCH NEXT 10000 ROWS ONLY` with an `ORDER BY`).
 5. **Credentials.** Never echo a full connection string or password; redact before showing any command or error output.
 
+**Tool:** `python C:/Github/tools/sql_run.py --engine mssql --host <server> --trusted|--user <login> --db <db> -e "<one statement>"` enforces rules 2 to 5 (refuses a second statement and `GO`, 10 s / 30 s timeouts, 10000 row stop, password only via `SQLCMDPASSWORD`, redacted output) and notes a non-idempotent statement. Read its docstring for the flags (`--read-only`, `--via <container>`, `--dry-run`).
+
 ## Design and EF Core notes
 
 - **Windows Integrated Auth does not work once the workload may run in a container or the cloud.** If that is possible, design for username/password auth from the start.

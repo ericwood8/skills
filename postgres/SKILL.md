@@ -12,6 +12,8 @@ description: Safety guardrails for running ad hoc SQL against PostgreSQL, plus c
 4. Bound inspection queries (`LIMIT`); `SET statement_timeout = '30s'` for anything that might scan.
 5. psql from Git Bash: `"/c/Program Files/PostgreSQL/18/bin/psql.exe" -h localhost -U <user> -d <db> -f file.sql`. `localhost` works while the machine name may be refused by `pg_hba.conf` (`no pg_hba.conf entry for host ...`): use the address the user has allowed.
 
+**Tool:** `python C:/Github/tools/sql_run.py --engine postgres --host localhost --user <user> --db <db> -e "<one statement>"` runs one ad hoc statement with a 10 s connect and 30 s `statement_timeout`, a 10000 row stop, `PGPASSWORD` only and redacted output; it refuses a second statement and `\` commands. It does not wrap a test in `BEGIN ... ROLLBACK` (rule 2): use `-f` for that. Read its docstring for the flags.
+
 ## Names
 - Unquoted names fold to **lower case**; `"CustomerId"` keeps its case and must then be quoted everywhere (`"public"."Customer"`). A PascalCase sample database works if every identifier is quoted; real databases are usually `snake_case`.
 - A parameter or variable named like a column makes plpgsql say "column reference is ambiguous". Prefix parameters (`"pName"`), or write `#variable_conflict use_column` at the top of the body.
