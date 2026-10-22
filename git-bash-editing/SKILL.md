@@ -63,3 +63,12 @@ A heredoc longer than about 40 lines, or one whose text needs an apostrophe, bac
 - If a task is much bigger than its label ("small", "cheap"), say so and ask for the reduced or full version before starting.
 - Real checks (an `npm install` and build per version, a database copy, a live API run) take minutes each: run them in one background job with a log file and a `DONE` marker, and read the log at the end.
 - A fix found by a live run also needs a unit test, or the next edit loses it.
+
+## Saved tools and the session's own traps (C:\Github\tools)
+
+- **Look in `C:\Github\tools` (read its README) before writing a scratch script.** `edit_text.py` does the exact-count, CRLF-safe replace (`replace_many` or `--json` for several edits, all or nothing), `compare_trees.py` compares two trees by file name, `run_logged.py` runs a long command with a log, `spec_item.py` lists, moves and appends numbered spec items. Writing a Node script for a replace that `edit_text.py` already does was the repeated mistake.
+- **A Windows Python does not understand Git Bash paths** (`/c/Github/x` becomes `C:\c\Github\x` and "file not found"). Pass `C:/Github/x`; the saved tools convert `/c/...` themselves.
+- **Run a long job with `run_logged.py` and `run_in_background: true`, not `( cmd > log; echo DONE ) &`.** The subshell form returns at once, so the completion notice arrives for the wrong thing; the harness already notifies when a background command exits. Use a new log name per run: after a rerun, notices (and Monitor events) of the earlier run still arrive and look like results. A foreground `sleep` and a chain of short sleeps are blocked; do not poll.
+- **The working directory resets on every Bash call.** Use absolute paths or `cd X && cmd` in the same call; the same holds for a program started from a different folder.
+- **Do not make a "just in case" backup copy and delete it.** The delete of a stray file in the drive root was refused by the safety check and nothing in the command ran, including the edit that followed it. Use `git diff` / `git checkout` for undo, and put scratch files in the scratchpad folder.
+- **Folders move between sessions.** Specification documents are under `C:\Specs` (`CodeGenPossibilities`, `TimeEntryServer_CodePossibilities`; the old `C:\EricWork`), off-line builds and generated samples under `C:\Samples` (the old `C:\TimeEntryServer_CodeGen`). `ls` the exact path; if it is missing, ask where it went instead of searching the drive.
