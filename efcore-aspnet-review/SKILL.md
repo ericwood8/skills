@@ -22,6 +22,10 @@ Create a throwaway console project (in the scratchpad, not the repo) that refere
 - A collection navigation on the parent plus a reference navigation on the child means EF fix-up links both ways and serializing the parent loops (JSON cycle). Hand-written entities often keep only one side on purpose.
 - A class deriving a "name/active" base (Name + IsActive) requires exactly those columns; a table whose column is `UserName` cannot use it.
 
+## Read every table, not only build the model
+
+A model dump misses data-dependent failures. Reading each `DbSet` with `ToListAsync` (CodeGenNew: `Docs/Verification/Tools/ef_read_all.py`) finds: a relationship that "cannot target the primary key" (thrown when the model is first built, on the first `Set<T>()`), and `SqlNullValueException` where a column EF treats as required holds NULL. `HasPrincipalKey` for a foreign key to a non-primary-key column makes that column required, so it fails on real data even though the model builds; prefer no navigation for such a key. `ToDictionaryAsync` on an `IQueryable` materialises whole entities (every required column is read); select the two columns first. A `DbContext` is not thread safe: a desktop app sharing one context needs one gate for all screens.
+
 ## Find entity/column mismatches before they become runtime 500s
 
 An entity can compile and pass tests and still fail every query because EF selects a column the table does not have (`Invalid column name 'X'`). Causes: an enum-typed property next to its `...Id` int; a base-class property whose column has another name (`BaseNameActiveEntity.Name` vs a column `UserName`); a typo in the database (`RequestExpenseSheetd` vs `RequestExpenseSheetId`).
