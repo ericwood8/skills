@@ -35,6 +35,7 @@ description: Safety rules for running ad hoc SQL against MySQL, plus concrete go
 
 - `CALL p(...)`, `IN`/`OUT`; a plain `SELECT` returns a result set. No default parameter values (pass every parameter, in order, positionally; an optional create-user parameter is an explicit `NULL`, where SQL Server and PostgreSQL leave it out). No `CREATE OR REPLACE PROCEDURE` (`DROP PROCEDURE IF EXISTS`). A script needs `DELIMITER $$ ... $$ DELIMITER ;` (a client feature, not SQL). No `RETURNING` (`SELECT LAST_INSERT_ID()` or `SET v = LAST_INSERT_ID()`). `LIMIT` takes parameters/variables but not expressions (`SET v_offset = (page-1)*size` first). Errors with `SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '...', MYSQL_ERRNO = 55509`; a foreign-key delete failure is error 1451 (`DECLARE EXIT HANDLER FOR 1451 SELECT -1`). Parameters shadow columns of the same name: prefix them.
 - **`ROW_COUNT()` after an UPDATE is the number of rows that actually changed** (0 for identical values): test existence with `EXISTS (SELECT 1 ...)`.
+- **A `SET` list is evaluated left to right and later assignments see the new values** (SQL Server and PostgreSQL read the old row). `SET status='failed', retries=retries+1, run_after=IF(retries<max, ...)` reads the already-incremented `retries`: put the column the others depend on last, or compute from the old value first.
 - `CALL` returning a flag: `CASE WHEN EXISTS (...) THEN 1 ELSE 0 END AS IsSelected` arrives in the Oracle EF provider's `SqlQueryRaw<T>` as a `bool` property without a cast.
 
 ## Types and information_schema
