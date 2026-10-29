@@ -1,6 +1,6 @@
 ---
 name: bannerlord-decompile
-description: Decompile a Mount & Blade II Bannerlord mod's compiled DLLs back into buildable C# source with ILSpy's CLI (ilspycmd), and get the result compiling again against the real game or BUTR reference assemblies. Use when asked to decompile a Bannerlord mod, inspect what a compiled Bannerlord mod DLL actually does, patch/recompile a Bannerlord mod without its original source, or look up a TaleWorlds.* API signature from the real installed game assemblies.
+description: Use when asked to decompile a Mount & Blade II Bannerlord mod, inspect what a compiled Bannerlord mod DLL does, patch or recompile a mod without its source, or look up a TaleWorlds.* API signature from the installed game assemblies. Trigger words - ilspycmd, ILSpy, BUTR reference assemblies, TaleWorlds, Bannerlord mod DLL.
 ---
 
 # Bannerlord Mod Decompiling (ILSpy / ilspycmd)

@@ -1,6 +1,6 @@
 ---
 name: csharp
-description: Personal C# coding conventions - a project-root GlobalUsings.cs for namespaces common across that project, defaulting to modern C# 14/.NET 10 syntax unless the project is pinned to .NET Framework/Desktop, preferring a single well-named boolean expression over scattered conditional logic, required/init properties over mutable setters, records for DTOs, propagating CancellationToken through async call chains, and preferring extension methods over static helpers when there's one obvious subject parameter (for IntelliSense discoverability). Use when writing or reviewing C# code, scaffolding a new .csproj, designing a data model or DTO, writing an async method, deciding how to express a conditional/boolean check, or deciding whether a static helper method should be an extension method.
+description: Use when writing or reviewing C# code, scaffolding a .csproj, designing a data model or DTO, writing an async method, expressing a conditional, or deciding whether a static helper should be an extension method. Trigger words - GlobalUsings.cs, C# 14, .NET 10, required, init, record, CancellationToken, extension method, boolean expression.
 ---
 
 # C# Conventions
@@ -94,6 +94,10 @@ if (StringHelpers.IsNameBad(name)) ...
 ```
 
 **Don't force it.** Only make something an extension method when the method genuinely reads as an operation *on* that one parameter. Skip it when there's no single obvious subject — several equally-important inputs (a diff between two objects of the same type, where neither is more "the subject" than the other), a static factory building a new instance from a primitive (`TemplateConfig.Load(path)`: `path` is just a generic `string`, not conceptually a `TemplateConfig`, so a `path.LoadAsTemplateConfig()` extension would be a non-obvious method to find hanging off every string in the codebase), or a method that's really about the *type* itself rather than a particular instance. Test: "if I were about to type `parameterName.`, would I actually expect this method to show up there?" If yes, make it an extension method. If the honest answer is "not really, I'd go looking for a helper class instead," leave it a plain static method — a forced `this` parameter makes the subject arbitrary and can read *less* clearly than the plain static call.
+
+## Checking a claim about the compiler
+
+When you are not sure a snippet compiles, or which error it gives, run it instead of reasoning about it: `python C:\Github\tools\cs_snippet_check.py -e "<code>"` (or files) builds it in a throwaway net10.0 project and prints each error once as `CODE file(line,col) message`. `--run` also runs it, `--warnings` lists warnings, `--package ID@VERSION --offline` adds a cached NuGet package. Examples checked: `var a = new[] { };` is `CS0826`; a generic type with `where T : class` used with an unconstrained `TOutput` is `CS0452`; `catch ... when (await ...)` is `CS7094`.
 
 ## Nullable lists
 

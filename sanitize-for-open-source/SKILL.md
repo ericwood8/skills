@@ -1,6 +1,6 @@
 ---
 name: sanitize-for-open-source
-description: Scrub employer/client/proprietary system names, personal Windows user-folder paths (C:\Users\<name>\..., C:\<PersonalWorkFolder>\...), real server/database names left in "verified live against..." testing narrative, and "ported from/adapted from/legacy of" lineage commentary out of a repo's README, docs/specs, code comments, and config before making it public on GitHub. Use when the user says a repo is going public, asks "any problems making X public", or asks to remove employer/company/personal references from code or documentation.
+description: Use when the user says a repo is going public, asks whether there are any problems making a repo public, or asks to remove employer, company or personal references from code or documentation. Scrubs names, personal folder paths, real server or database names and lineage comments from README, docs, comments and config. Trigger words - make public, open source, employer name, personal path, ported from.
 ---
 
 # Sanitizing a repo before it goes public

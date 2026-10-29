@@ -1,6 +1,6 @@
 ---
 name: nginx-config-testing
-description: How to write and prove an nginx config for a built SPA (Angular or Vite/React) behind an API proxy - gzip, long-lived caching of hashed files only, no-cache index.html, upstream keepalive - and how to test it with the real nginx image in Docker on Windows before shipping, including the template-substitution (envsubst) rules of the official image. Use when editing an nginx.conf or default.conf.template, a Dockerfile that serves a front end with nginx, or a code-generator template that writes one.
+description: Use when editing an nginx.conf or default.conf.template, a Dockerfile that serves a built Angular or Vite/React front end with nginx, or a code-generator template that writes one, and when you must prove the config with the real nginx image before shipping. Trigger words - gzip, hashed file caching, no-cache index.html, upstream keepalive, envsubst, template substitution.
 ---
 
 # nginx for a built SPA: write it, then run it
@@ -59,10 +59,26 @@ curl -s -H 'Accept-Encoding: gzip' URL | wc -c ; curl -s URL | wc -c           #
 - Compare the old and the new config side by side on two ports with the same `dist`; the byte counts are the evidence (518,150 to 119,242 for a 520 kB Angular bundle).
 - Check four URLs: a hashed file, an unhashed one (`favicon.ico`, expect no Cache-Control), `index.html`, and a router path such as `/employees/7` (expect 200 with `no-cache`).
 - To test the proxy half without the real API, put a second `nginx:alpine` on a user-defined network serving a JSON file under `/srv/api/`, and give the front end `API_UPSTREAM=thatname:8080`.
-- Counting upstream connections: `stub_status` on the API side (`location /status { stub_status; }`); the third number on line 3 is total accepts. Use `127.0.0.1`, not `localhost`, in `wget` inside the container.
+- Counting upstream connections: `stub_status` on the API side (`location /status { stub_status; }`); the third number on line 3 is total accepts. Use `127.0.0.1`, not `localhost`, in `wget` inside the container. Upstream connections are pooled **per worker process** (18 workers here), so 10 requests show 10 new connections even with `keepalive`: send about 200 requests and expect roughly one connection per worker (16 measured) against 200 without a pool.
 - Pick ports above 18000; Windows reserves ranges (8082 was refused with "forbidden by its access permissions").
 - `curl -D - -o /dev/null -w '%{size_download}'` can print 0 under Git Bash; pipe the body into `wc -c` instead.
 
 ## In a code generator template
 
 A template line may not hold two hyphens in a row (CodeGenNew `TemplateDashTests`), so write comments with one hyphen or none. Assert the directives in a test over the generated text, and extract the generated file between its `@@@FILE` markers to run it through the real nginx as above.
+
+## How this was verified
+
+- The config and the byte counts (518,150 to 119,242 for a 520 kB Angular bundle) come from a run against the `nginx:alpine` image on Docker Desktop on 2026-10-08 (the only commit of this skill).
+- Re-run on 2026-10-29 with `nginx:alpine` = nginx 1.31.8 (Docker Engine 28.0.1), using the config above with a generated 200 kB script, a favicon, an `index.html` and a second nginx as the API:
+  - `nginx -t` passes; the official image's template step replaced only `${API_UPSTREAM}` and kept `$uri`.
+  - The hashed file answered `Content-Encoding: gzip` and `Cache-Control: public, max-age=31536000, immutable` (148,715 bytes compressed against 200,000 plain, for random text); `favicon.ico` had no `Cache-Control`; `index.html` and the deep link `/employees/7` answered 200 with `no-cache`; a missing hashed file answered 404; an unhashed file under `/assets/` had no cache header with the Angular pattern.
+  - The unquoted `{8}` regex failed `nginx -t` (`unknown directive "8}\.js$"`); a location with its own `add_header` dropped the server-level header.
+  - Upstream keepalive, 200 requests: an `upstream` block with `keepalive 16` and HTTP/1.1 made 16 connections; a bare `proxy_pass http://host:port` made 200; an `upstream` block with no `keepalive` also made 16, which confirms nginx 1.31 pools by default when an `upstream` block exists.
+- Not re-run: the byte counts of the real Angular bundle, gzip of proxied API JSON, the `curl %{size_download}` oddity under Git Bash, a template written by a code generator.
+
+## What this does not prove
+
+- That the config is right for another nginx version or image (only 1.31.8 was tested), or behind a CDN or an ingress.
+- That it is safe to ship: it has no TLS, security headers or rate limits.
+- That the caching rules suit a build that does not hash its file names the way Angular (8 characters) or Vite (`/assets/`) does.

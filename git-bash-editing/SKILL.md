@@ -1,6 +1,6 @@
 ---
 name: git-bash-editing
-description: ALWAYS read before writing a script or a file body from Git Bash (never use a heredoc for file contents: use the Write and Edit tools). Rules for editing files from Git Bash on Windows without mangled backslashes, escapes that become real newlines, "unexpected EOF" rejections, CRLF patterns that match nothing, sqlcmd carriage returns, rewritten Windows paths, a working directory that resets, and junctions for scratch copies. Use when editing source files with sed/perl/python/heredocs, looping over sqlcmd output, or overwriting generated files that also hold hand edits.
+description: Use when writing a script or a file body from Git Bash (read this first; never put file contents in a heredoc, use the Write and Edit tools), editing source with sed, perl, python or heredocs, looping over sqlcmd output, or overwriting generated files that also hold hand edits. Trigger words - backslashes mangled, escape became a newline, unexpected EOF, CRLF pattern matches nothing, path rewritten, working directory reset, junction for a scratch copy.
 ---
 
 # Editing files from Git Bash on Windows
@@ -22,7 +22,7 @@ A heredoc longer than about 40 lines, or one whose text needs an apostrophe, bac
 
 - **`unexpected EOF while looking for matching '`** rejects the whole command and nothing in it ran (check `ls -la` / `git status` before assuming a partial result). Cause: an apostrophe or quote inside a large heredoc, even with `<<'EOF'`. Fix: Write the file, then run it.
 - **`rm -f $TEMP/*.py`** (a variable in a wildcard path) is refused and the whole command line, including the commands before it, does not run. Clean up in its own call with literal paths, or leave scratch files.
-- **A Windows path passed to a Windows program is rewritten.** `sqlcmd -i /c/x/y.sql` fails with "Error occurred while opening ... C:" and the script silently did not run. Use the PowerShell tool with a backslash path, or `"$(cygpath -w /c/x/y.sql)"`. An argument starting with `/` is also turned into a path: set `MSYS_NO_PATHCONV=1`. After DDL, query the catalog to confirm it took effect.
+- **A Windows path passed to a Windows program is rewritten.** `sqlcmd -i /c/x/y.sql` fails with "Error occurred while opening ... C:" and the script silently did not run. A forward-slash path with a drive letter (`-i C:/Users/me/y.sql`) fails too: `sqlcmd` reads `C:` plus switches, `/Users` becomes `-U`, and the message is the misleading "The -E and the -U/-P options are mutually exclusive". A relative path or a backslash path works (see the `mssql` skill). Use the PowerShell tool with a backslash path, or `"$(cygpath -w /c/x/y.sql)"`. An argument starting with `/` is also turned into a path: set `MSYS_NO_PATHCONV=1`. After DDL, query the catalog to confirm it took effect.
 - **Python run from Git Bash cannot see `/c/...` either** (`FileNotFoundError`): pass `C:/...` paths to `python` and to any Windows program. A multi-line edit script of more than a few lines goes in a file made with Write, even when it looks harmless (an apostrophe or a backslash inside a 90-line heredoc rejects the whole command).
 - **Python run from Git Bash cannot see `/tmp`.** Put scratch files in the session scratchpad with a `C:/...` path.
 - The **working directory resets** between Bash calls: use absolute paths or `cd` in the same command. Environment variables do not persist either: `export` them in the command that starts the server.
@@ -59,16 +59,14 @@ A heredoc longer than about 40 lines, or one whose text needs an apostrophe, bac
 ## Process
 
 - Read this skill **before** scripting edits; the rules were known and still skipped once.
-- Do not `find /` for a file the user named: ask, or look only in folders the conversation mentioned.
 - If a task is much bigger than its label ("small", "cheap"), say so and ask for the reduced or full version before starting.
 - Real checks (an `npm install` and build per version, a database copy, a live API run) take minutes each: run them in one background job with a log file and a `DONE` marker, and read the log at the end.
 - A fix found by a live run also needs a unit test, or the next edit loses it.
 
-## Saved tools and the session's own traps (C:\Github\tools)
+## Traps seen in sessions
 
-- **Look in `C:\Github\tools` (read its README) before writing a scratch script.** `edit_text.py` does the exact-count, CRLF-safe replace (`replace_many` or `--json` for several edits, all or nothing), `compare_trees.py` compares two trees by file name, `run_logged.py` runs a long command with a log, `spec_item.py` lists, moves and appends numbered spec items. Writing a Node script for a replace that `edit_text.py` already does was the repeated mistake.
+The saved tools (`edit_text.py` and the others in `C:\Github\tools`) are listed in the global `CLAUDE.md`; check them before writing a scratch script.
+
 - **A Windows Python does not understand Git Bash paths** (`/c/Github/x` becomes `C:\c\Github\x` and "file not found"). Pass `C:/Github/x`; the saved tools convert `/c/...` themselves.
 - **Run a long job with `run_logged.py` and `run_in_background: true`, not `( cmd > log; echo DONE ) &`.** The subshell form returns at once, so the completion notice arrives for the wrong thing; the harness already notifies when a background command exits. Use a new log name per run: after a rerun, notices (and Monitor events) of the earlier run still arrive and look like results. A foreground `sleep` and a chain of short sleeps are blocked; do not poll.
-- **The working directory resets on every Bash call.** Use absolute paths or `cd X && cmd` in the same call; the same holds for a program started from a different folder.
 - **Do not make a "just in case" backup copy and delete it.** The delete of a stray file in the drive root was refused by the safety check and nothing in the command ran, including the edit that followed it. Use `git diff` / `git checkout` for undo, and put scratch files in the scratchpad folder.
-- **Folders move between sessions.** Specification documents are under `C:\Specs` (`CodeGenPossibilities`, `TimeEntryServer_CodePossibilities`; the old `C:\EricWork`), off-line builds and generated samples under `C:\Samples` (the old `C:\TimeEntryServer_CodeGen`). `ls` the exact path; if it is missing, ask where it went instead of searching the drive.

@@ -1,6 +1,6 @@
 ---
 name: self-contained-deployment
-description: Personal deployment philosophy for C# desktop/CLI apps — no installer, copy-the-folder-and-go, auto-create missing folders silently, auto-seed missing config/template files from embedded defaults without ever overwriting a customized one, embed small static assets (icons, etc.) as resources rather than loose files, and where per-user mutable settings actually belong. Includes a concrete .NET/MSBuild gotcha (Mono.TextTemplating breaking under self-contained deployment, and a culture-code false-positive on double-extension filenames). Use when scaffolding a new C# app's deployment model, deciding self-contained vs framework-dependent, or handling first-run setup/config seeding.
+description: Use when scaffolding a C# desktop or CLI app's deployment model, deciding self-contained versus framework-dependent, or handling first-run setup and config seeding. Trigger words - no installer, copy the folder, auto-create folders, seed config from embedded defaults, embedded resources, per-user settings, Mono.TextTemplating self-contained.
 ---
 
 # Self-contained deployment philosophy
@@ -31,21 +31,9 @@ files. This eliminates an entire class of "forgot to copy the Images folder" dep
 the footprint of what has to travel with the exe. Reserve loose on-disk files for things the developer is
 actually meant to open and edit directly (templates, hand-editable config).
 
-### MSBuild gotcha: `EmbeddedResource` items silently vanish for filenames with a real ISO culture code
+### MSBuild gotcha: `EmbeddedResource` items vanish for file names with a culture code
 
-MSBuild's `AssignCulture` task inspects each filename segment between dots looking for something that
-matches a known culture code (e.g. `MyResource.fr.resx` → French satellite resource). If a filename
-happens to contain a segment that collides with a real culture code — e.g. `SP_Insert.tt.config`, where
-"tt" is also the ISO code for Tatar — MSBuild silently reroutes that file into a `tt\` satellite resource
-assembly instead of the main one. `Assembly.GetManifestResourceNames()` on the main assembly then simply
-won't list it, with no build warning or error at all.
-
-**Fix:** add `WithCulture="false"` to the `EmbeddedResource` item(s):
-```xml
-<EmbeddedResource Include="Templates\**\*.*" WithCulture="false" />
-```
-Diagnose this class of bug by running `dotnet build -v diag` and grepping for `"Culture of ... was assigned
-to file"` — that's the exact tell.
+A file such as `SP_Insert.tt.config` (`tt` is the Tatar culture code) is moved silently into a satellite assembly. Add `WithCulture="false"` to the `EmbeddedResource` item. The diagnosis and the evidence are in the `msbuild` skill.
 
 ## `.NET` self-contained vs framework-dependent — check what your dependencies actually need
 

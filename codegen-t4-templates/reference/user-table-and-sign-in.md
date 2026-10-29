@@ -1,0 +1,14 @@
+# User table, sign-in and credential columns
+
+Read this when: a table holds users or password hashes, ApiAuth is on, or Python/Rust sign-in is touched.
+
+## User table, sign-in and credential columns
+
+- **A credential column is decided by the project, not only by its name.** `ColumnModel.IsCredentialColumn` is `IsUserCredential || name rule`; `UserTable.MarkCredentials` sets `IsUserCredential` on the user table's hash column (setting `PasswordHashColumn` or its usual synonyms) in `TemplateCache` and `TemplateRunner` **before** the session `Project` is set. Every screen rule that hides it (FormModel, `SearchableColumns`, the Blazor page) then follows in all stacks at once. A hash column called `Pword` or `PwdHash` is hidden as well.
+- **Shared user-table rules live in Core** (`UserTable.ResolveTable`, `IsUserTable`, `PlanOf`; `DtoShape.InputColumns(table, project)` leaves the hash out of bodies). Every stack's entity/DTO/struct/schema leaves the hash out of answers, and inserts, updates and clones never write it. An update that carries a hash keeps the stored one.
+- **Problem types are named once** (`ProblemTypes`: `column-not-yours` 403 for admin/role columns changed by a non-admin, `last-administrator` 422, `duplicate-value` 409 for a sign-in name, `not-your-row` 403). Python and Rust answer the same types and statuses as ASP.NET.
+- **Sign-in on Python and Rust copies the .NET wire contract**: `POST /api/auth/login`, HS256 JWT with the same claims, hash text `pbkdf2-sha256$600000$salt_b64$hash_b64` (90 characters), key from env `Jwt__Key` (at least 32 characters), bootstrap admin from `Bootstrap__AdminUserName` / `Bootstrap__AdminPassword`, and `set-password <name>` reading `NEW_PASSWORD` (exit 0 ok, 1 unknown user, 2 too short). Check the hash in both directions against a hash the .NET command wrote.
+- **`ApiAuth=true` implies the `Jwt` essentials group** (`ImpliedEssentialsGroups`) and, with a `UserTable`, the stack's `UserDirectory` template (`ImpliedPlanTemplates`); a new template for this also goes into `DefaultAssetSeeder` and the group counts. Samples generated before `ApiAuth` need the setting and a regenerate.
+- **Python stack omits tables with both Name and IsActive** (they are name/active tables handled by the other stacks), so such a user table can sign in but has no Python edit routes.
+- **Rust specifics**: axum middleware `require_user` plus `Extension<CurrentUser>`, `Scope {All, Owner, Nobody}`; `into_make_service_with_connect_info` for the throttle; `[profile.dev.package."*"] opt-level = 3` or pbkdf2 is far too slow in debug; `cargo build` on Windows needs `vcvars64.bat` from a Visual Studio install that has `msvcrt.lib`. `#[allow(dead_code)]` only where a field is used by some projects.
+- **Python specifics**: routers included in `main.py` with `Depends(require_user)`; `PY_*` templates must import `System.Collections.Generic`; a test table for Python must not have Name and IsActive.

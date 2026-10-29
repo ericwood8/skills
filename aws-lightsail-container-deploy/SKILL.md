@@ -1,6 +1,6 @@
 ---
 name: aws-lightsail-container-deploy
-description: Hard-won operational knowledge for deploying multi-container apps to AWS Lightsail Container Service — container naming rules, image versioning, the real create-container-service-deployment API shape, pod-style shared networking, the deployment state model, and log-based debugging. Use when running `aws lightsail` container-service commands, deploying or redeploying to Lightsail, editing a Lightsail containers.json/public-endpoint.json, or debugging a Lightsail container-service error.
+description: Use when running `aws lightsail` container-service commands, deploying or redeploying a multi-container app to Lightsail, editing a Lightsail containers.json or public-endpoint.json, or debugging a Lightsail container-service error. Trigger words - create-container-service-deployment, container name rejected, image version, pod networking, deployment stuck, Lightsail logs.
 ---
 
 # AWS Lightsail Container Service Deploy

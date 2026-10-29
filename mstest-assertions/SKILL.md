@@ -1,6 +1,6 @@
 ---
 name: mstest-assertions
-description: Replacements for the MSTEST0037 analyzer warnings in MSTest 3.x/4.x tests, with the argument order that trips people up (the bound or expected value comes first). Use when fixing MSTEST0037 warnings or writing MSTest assertions on collections, strings and comparisons.
+description: Use when fixing MSTEST0037 analyzer warnings or writing MSTest 3.x or 4.x assertions on collections, strings and comparisons. Trigger words - MSTEST0037, Assert.IsTrue to Assert.Contains, expected value first.
 ---
 
 # MSTEST0037: use the specific assertion

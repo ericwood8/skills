@@ -1,6 +1,6 @@
 ---
 name: difftastic
-description: Use difftastic (the `difft` CLI) whenever comparing two files, two directories, or two versions of code/config/SQL and a plain line-based diff (git diff, fc, Compare-Object) would be noisy or misleading — especially when a large block was rewritten and a normal diff shreds it into dozens of scattered +/- lines instead of showing it as one coherent change. Trigger this on requests like "diff these two files", "compare this SQL script against the restored version", "show me what changed in this class", "write the differences to a text file", or any time you're about to reach for `git diff` on a real source/code/SQL file and want block-aware output instead of line noise. Also read this before invoking `difft` in a brand new session, since a just-installed or PATH-updated `difft` frequently fails to resolve in a fresh shell for reasons this skill explains and works around.
+description: Use when comparing two files, two directories or two versions of code, config or SQL and a plain line diff (git diff, fc, Compare-Object) would be noisy, especially after a large block was rewritten; also before running `difft` in a new session, since a freshly installed `difft` often does not resolve in the shell. Trigger words - diff these two files, compare against the restored version, what changed in this class, write the differences to a file.
 ---
 
 # difftastic (`difft`)

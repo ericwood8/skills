@@ -1,11 +1,11 @@
 ---
 name: ui-conventions
-description: Personal desktop-dialog and toolbar UX conventions — keyboard access keys with conflict checking, Escape/Enter behavior, default-button focus, first-control focus on toolbars, tooltips on every toolbar button, and colorblind-safe status icons (shape-coded, not just color-coded) for success/warning/error messages, and input-control choice rules (check box for true/false, radio buttons for up to three choices, drop-down for more, number box for whole numbers, labels not text boxes for read-only text, no more than 20 fields on a tab) so users cannot type bad values. Framework-agnostic (applies to WPF, WinUI3, WinForms, or any desktop UI); see the winui3 skill for WinUI3-specific implementation techniques. Use when building or reviewing any dialog, form, toolbar/menu bar, or status/result message in a desktop app.
+description: Use when building or reviewing any desktop dialog, form, toolbar or menu bar, or a status or result message in WPF, WinUI3, WinForms or another desktop UI; also the required-field mark and the input control for a field on a web form (React, Angular, Blazor). Trigger words - required field, red asterisk, access key, Escape and Enter, default button, toolbar tooltip, status icon, colorblind, check box or radio buttons or drop-down, read-only text, fields per tab. See the winui3 skill for WinUI3 techniques.
 ---
 
 # Desktop UI conventions
 
-Apply these to every screen in every desktop app, not just one project. They come from concrete requests
+Apply these to every screen in every desktop app, not just one project. Sections 7, 8, 9 and 12 (input controls, explanatory text, captions, required marks) apply to web forms too; the others are desktop only. They come from concrete requests
 made across a real project (CodeGenNew) after the first pass shipped without them.
 
 ## 1. Keyboard access keys (hotkeys) on buttons

@@ -1,6 +1,6 @@
 ---
 name: skill-writer
-description: Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.
+description: Use when creating a new skill, editing or improving an existing skill, running evals or benchmarks on a skill, or tuning a skill's description so it triggers correctly. Trigger words - write a skill, SKILL.md, eval, benchmark, description optimization.
 ---
 
 # Skill Creator

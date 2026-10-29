@@ -1,6 +1,6 @@
 ---
 name: microsoft-docs
-description: Look up current Microsoft Learn documentation (.NET, MSBuild, Windows/WinUI, Azure, M365, Power Platform, etc.) instead of relying on training data that may be stale or version-mismatched. Use when answering "how does X work", API/config/limit questions, or anything where the exact current behavior for a specific SDK/tool version matters.
+description: Use when answering how a .NET, MSBuild, Windows, WinUI, Azure, M365 or Power Platform feature works, or any API, configuration or limit question where the exact current behavior for a specific SDK or tool version matters. Looks the answer up in Microsoft Learn instead of relying on memory.
 ---
 
 # Microsoft Docs Lookup

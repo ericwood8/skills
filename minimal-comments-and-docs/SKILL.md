@@ -1,6 +1,6 @@
 ---
 name: minimal-comments-and-docs
-description: House rules for code comments, file headers and documentation in any repository. Use whenever writing or editing comments, XML doc comments, template headers, README or design docs, or when asked to document code. Covers no section or page numbers, no comments that restate code, no double hyphens or em dashes outside real SQL, comments that state purpose, named constants for error numbers, and keeping documentation minimal.
+description: Use when writing or editing code comments, XML doc comments, file or template headers, README or design docs, or when asked to document code. Trigger words - comment, header, docs, section number, page number, double hyphen, em dash, error number constant.
 ---
 
 # Comments and documentation: say less, say why

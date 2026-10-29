@@ -1,6 +1,6 @@
 ---
 name: odata-generated-grids
-description: How the generated OData and REST grids of CodeGenNew (React, Angular, Blazor) work and how to change or prove them: the OData Variant of the page templates, $select built from the shown columns, the ChosenGridColumns Core rule and its helper templates, sorts and filters that must be dropped with a hidden column, owner-scoped tables (OData scopes whatever $select asks, REST search is refused), and the live click-through and scoping checks. Use when adding a grid feature to the page templates, touching OData query building, or verifying a grid change in a running app.
+description: Use when adding a grid feature to the CodeGenNew page templates, touching OData query building, changing which columns a generated React, Angular or Blazor grid shows, or verifying a grid change in a running app. Trigger words - OData variant, $select, ChosenGridColumns, hidden column sort, owner-scoped table, REST search refused.
 ---
 
 # OData and REST grids in CodeGenNew

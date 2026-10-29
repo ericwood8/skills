@@ -1,6 +1,6 @@
 ---
 name: github-issue-creator
-description: Turn messy input (error logs, voice-dictated bug reports, screenshots, casual descriptions) into a clean, structured GitHub issue and open it with `gh issue create`. Use when the user pastes an error, describes a bug informally, or asks to file/open a GitHub issue from notes.
+description: Use when the user pastes an error or log, describes a bug informally, shares a screenshot or voice-dictated notes, or asks to file or open a GitHub issue. Turns the input into a clean structured issue and opens it with `gh issue create`.
 ---
 
 # GitHub Issue Creator
