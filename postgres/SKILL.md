@@ -30,13 +30,13 @@ description: Use when running SQL against a PostgreSQL server, writing PostgreSQ
 - Search/list: `CREATE OR REPLACE FUNCTION ... RETURNS SETOF "public"."T" LANGUAGE sql STABLE` then `SELECT * FROM f(...)` (composable, EF maps it like the table). Scalar count: `RETURNS integer`, called `SELECT f(...) AS "Value"` so EF's `SqlQueryRaw<int>` finds the column.
 - Parameters without a default must come **before** parameters with one; call optional ones by name (`"pName" => 'x'`). `OFFSET n LIMIT m` or `LIMIT m OFFSET n`; case-insensitive search is `ILIKE`.
 - No OUTPUT parameters: return the new key (`RETURNING "Id" INTO v_id; RETURN v_id`). Errors: `RAISE EXCEPTION '...' USING ERRCODE = '55509'`. A foreign-key delete failure is the `foreign_key_violation` exception (`EXCEPTION WHEN foreign_key_violation THEN ...`; the block makes a sub-transaction). The function runs in the caller's transaction: there is no `BEGIN TRANSACTION` inside it.
-- **`CREATE OR REPLACE FUNCTION` with a different parameter list adds a second function** (an overload); it does not replace the first, and a call that fits both fails with `function f(integer) is not unique`. Run `DROP FUNCTION IF EXISTS "s"."f"(<old types>)` first (checked on 18.6, 2026-10-29).
+- **`CREATE OR REPLACE FUNCTION` with a different parameter list adds a second function** (an overload); it does not replace the first, and a call that fits both fails with `function f(integer) is not unique`. Run `DROP FUNCTION IF EXISTS "s"."f"(<old types>)` first (checked on 18.6).
 - Upsert: `UPDATE ...; IF FOUND THEN ... END IF; INSERT ...` or `ON CONFLICT (key) DO NOTHING`; after loading rows with explicit identity values, move the counter: `SELECT setval(pg_get_serial_sequence('"public"."T"', 'Id'), (SELECT max("Id") FROM "public"."T"))`. `OVERRIDING SYSTEM VALUE` is needed to insert into a `GENERATED ALWAYS` identity.
 
 ## Npgsql / EF Core
 - A `DateTime` maps to **`timestamp with time zone`** and Npgsql refuses any non-UTC value ("Cannot write DateTime with Kind=Unspecified to PostgreSQL type 'timestamp with time zone'"). For `timestamp` columns say so: `[Column(TypeName = "timestamp")]` or `configurationBuilder.Properties<DateTime>().HaveColumnType("timestamp")` in `ConfigureConventions`.
 - `FromSqlRaw("SELECT * FROM f(@p1, @p2)", new NpgsqlParameter("@p1", NpgsqlDbType.Text) { Value = (object?)x ?? DBNull.Value })`: type a null parameter. The `money` type works as `decimal` (`[Column(TypeName = "money")]`) but real databases use `numeric`.
-- **An enum column rejects the `text` parameter EF sends** (`column "m" is of type mood but expression is of type text`). Create assignment casts once per enum: `CREATE CAST (text AS the_enum) WITH INOUT AS ASSIGNMENT;` and the same from `character varying`; the insert then works. Compare or order the column as `m::text` (for `ILIKE`). Checked on 18.6, 2026-10-29.
+- **An enum column rejects the `text` parameter EF sends** (`column "m" is of type mood but expression is of type text`). Create assignment casts once per enum: `CREATE CAST (text AS the_enum) WITH INOUT AS ASSIGNMENT;` and the same from `character varying`; the insert then works. Compare or order the column as `m::text` (for `ILIKE`). Checked on 18.6.
 - Entities with `jsonb` columns need `[Column(TypeName = "jsonb")]` on the string property.
 
 ## CHECK constraints (schema reading, 2026-10)
@@ -45,7 +45,7 @@ description: Use when running SQL against a PostgreSQL server, writing PostgreSQ
 
 ## Copying a database for a test
 
-`CREATE DATABASE "X_scratch" TEMPLATE "X";` copies a database without a dump. It needs the `CREATEDB` privilege and no other session on the source: a running API holds a pooled connection and the statement fails with `source database "X" is being accessed by other users`. Stop the API (or terminate its sessions) first. Drop with `DROP DATABASE "X_scratch"` and list `pg_database` afterwards. Checked on 18.6 on 2026-10-29: the copy failed with one other session open, worked when idle, and the drop left nothing behind (the test login was a superuser, so the missing-privilege case was not tried).
+`CREATE DATABASE "X_scratch" TEMPLATE "X";` copies a database without a dump. It needs the `CREATEDB` privilege and no other session on the source: a running API holds a pooled connection and the statement fails with `source database "X" is being accessed by other users`. Stop the API (or terminate its sessions) first. Drop with `DROP DATABASE "X_scratch"` and list `pg_database` afterwards. Checked on 18.6: the copy failed with one other session open, worked when idle, and the drop left nothing behind (the test login was a superuser, so the missing-privilege case was not tried).
 
 Quote mixed-case names when they travel through a shell. Windows PowerShell 5.1 drops the double quotes inside an argument passed to a native program (`psql -c 'SELECT 1 AS "MixedCase"'` printed the header `mixedcase`), so `CREATE DATABASE "X_scratch"` can create a lower-case name and a "Dropped" message can sit over a database that is still there. PowerShell 7 keeps the quotes, and so does piping the SQL to `psql` on stdin (both tested).
 
@@ -63,10 +63,7 @@ One function and one `AFTER UPDATE OR DELETE ... FOR EACH ROW` trigger: `TG_OP` 
 
 ## How this was verified
 
-- Written while building CodeGenNew's PostgreSQL support and samples (first commit 2026-10-02, last change 2026-10-22).
-- Re-checked on 2026-10-29 on PostgreSQL 18.6 with the `psql` 18 client, read-only or in `pg_temp`: `information_schema` boolean expressions come back NULL (182 columns of the InvoiceSystem copy); a function with a parameter lacking a default after one with a default is refused (`input parameters after one with a default value must also have defaults`); `localhost` is accepted while the machine name is refused by `pg_hba.conf`; `reltuples` is -1 for a table that was never analyzed.
-- Also checked in `pg_temp`, rolled back: `CREATE OR REPLACE FUNCTION` with a new parameter list leaves two functions and an ambiguous call fails ("is not unique"); an enum column rejects a `text` value until the assignment cast exists, after which the insert works and `m::text ILIKE` matches.
-- Not re-run: the Npgsql and EF Core items (timestamp, `jsonb`, `money`), psycopg and SQLAlchemy, CHECK parsing, trigger history, `setval`.
+Tested on this machine. The evidence, the versions used and the items **not re-run** are in [reference/verification.md](reference/verification.md): read it before saying a claim here was tested, and treat anything listed there as not re-run as unverified.
 
 ## What this does not prove
 

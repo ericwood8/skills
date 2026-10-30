@@ -25,14 +25,14 @@ It ships as a **single self-contained binary** (`difft` / `difft.exe`). There is
 separate per-language package to install — every bundled grammar (currently ~40+
 languages including C#, SQL, Python, JS/TS, Go, Rust, and more) is compiled into that
 one binary. Don't hardcode the language list in your own reasoning or in anything you
-tell the user — it can grow between difftastic releases. Check what's actually bundled
+tell the user — it can grow between difftastic releases. Check what's bundled
 in the installed binary at runtime:
 
 ```
 difft --list-languages
 ```
 
-## Step 1: Confirm `difft` actually resolves before using it
+## Step 1: Confirm `difft` resolves before using it
 
 Do this at the start of any session where you're about to use difftastic, especially
 if it was recently installed or updated — don't assume a prior session's success means
@@ -62,7 +62,7 @@ application process itself needs to fully exit and relaunch (or the user needs t
 off/on) before a new child shell inherits the updated `PATH`. Diagnose rather than
 assume:
 
-**1. Check whether the install actually registered `PATH` correctly** (this reads the
+**1. Check whether the install registered `PATH` correctly** (this reads the
 persisted registry value, not this process's stale copy — so it tells you whether the
 problem is "not installed" vs. "installed but not yet inherited"):
 

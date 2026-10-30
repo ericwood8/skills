@@ -101,7 +101,7 @@ end;
 - By default a `TFDConnection` runs in auto-commit: each statement commits alone. `StartTransaction` suspends that until `Commit` or `Rollback`.
 - Pair every `StartTransaction` with `Commit` or `Rollback` on every path; a transaction left open holds locks (on SQL Server, until the connection closes).
 - `lConn.InTransaction` tells whether one is open. Nested `StartTransaction` calls are counted by FireDAC (`TxOptions`); do not rely on partial rollback inside one.
-- Several queries that must share a transaction share one `TFDConnection`, or one `TFDTransaction` set as each query's `Transaction`.
+- Queries that must share a transaction share one `TFDConnection`, or one `TFDTransaction` set as each query's `Transaction`.
 - A read-only report can use `TxOptions.Isolation := xiReadCommitted` (the default) or the database's snapshot mode; set it before `StartTransaction`.
 
 ## Threads
@@ -114,7 +114,7 @@ End an answer about FireDAC with: what ran (nothing, if you could not compile), 
 
 ## How this was verified
 
-- Read on 2026-10-29: this machine has Delphi 12 Athens Community edition (`bds.exe` product name `Personal`). The FireDAC `.dcu` files are present under `Studio\23.0\lib\win32\release`, and only three FireDAC `.pas` files ship as source (`FireDAC.Phys.pas`, `FireDAC.Phys.SQLGenerator.pas`, `FireDAC.Phys.SQLPreprocessor.pas`), so the component classes could not be read.
+- This machine has Delphi 12 Athens Community edition (`bds.exe` product name `Personal`). The FireDAC `.dcu` files are present under `Studio\23.0\lib\win32\release`, and only three FireDAC `.pas` files ship as source (`FireDAC.Phys.pas`, `FireDAC.Phys.SQLGenerator.pas`, `FireDAC.Phys.SQLPreprocessor.pas`), so the component classes could not be read.
 - The command-line compiler refuses to run in this edition ("This version of the product does not support command line compiling"), and an MSBuild run of a small project compiled nothing. **No example here was compiled or run.**
 - The docwiki returned HTTP 403 to the fetch tool, so the statements above come from the FireDAC documentation as remembered, not from a page read in this session.
 

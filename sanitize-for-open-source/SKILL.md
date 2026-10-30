@@ -103,7 +103,7 @@ sample-output commit) even after the working tree is clean; anyone can `git show
 recover them. That's a separate, genuinely destructive operation (`git filter-repo` + a force-push that
 rewrites published commit hashes) — only do it if the user explicitly asks for it, and confirm first, since
 it can't be cleanly undone and breaks anyone who already cloned/forked the repo. Don't bring it up as a
-blocker unless the content in history is actually sensitive (credentials, real customer data) — a repo
+blocker unless the content in history is sensitive (credentials, real customer data) — a repo
 owner may reasonably not care that old, already-superseded text is technically recoverable from history.
 
 ## Verify

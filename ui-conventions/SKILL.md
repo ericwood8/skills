@@ -85,7 +85,7 @@ free).
 ## 7. Pick the input control that cannot take a bad value
 
 Apply to every screen, dialog and settings page in every project. A free-text box is the last choice,
-for values that really are free text. If the valid values are known, the control offers them, so the user
+for values that are free text. If the valid values are known, the control offers them, so the user
 cannot mistype one.
 
 | The field holds | Use | Notes |

@@ -46,4 +46,4 @@ aws lightsail get-container-log --service-name <service> --container-name <name>
 
 In the Critical Viewer repo the whole sequence is scripted: `python tools/deploy/lightsail/lightsail_deploy.py status | push | deploy | logs` (checks the rules above, picks the highest numeric image version, polls the deployment state, prints redacted logs on failure; run `deploy --dry-run` first).
 
-Full symptom → cause → fix detail (exact error text as actually seen) for every rule above: see [REFERENCE.md](REFERENCE.md).
+Full symptom → cause → fix detail (exact error text as seen) for every rule above: see [REFERENCE.md](REFERENCE.md).

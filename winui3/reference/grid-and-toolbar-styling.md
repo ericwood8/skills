@@ -30,7 +30,7 @@ Every grid on a CRUD screen (list pages and a master/detail dialog's child grids
 </Border>
 ```
 
-- **Do not use the `Card*` brushes** (`CardBackgroundFillColorDefaultBrush`, `CardStrokeColorDefaultBrush`): they are translucent tints meant to sit on another surface (`#B3FFFFFF` and about 6% black in Light) and show no shading on a plain page. `SolidBackgroundFillColorSecondaryBrush` (`#EEEEEE` Light / `#1C1C1C` Dark) and `ControlStrokeColorSecondaryBrush` (`#29000000` / `#18FFFFFF`) are opaque and visible. Check hex/alpha in the theme dictionary, not the resource name.
+- **Do not use the `Card*` brushes** (`CardBackgroundFillColorDefaultBrush`, `CardStrokeColorDefaultBrush`): they are translucent tints that sit on another surface (`#B3FFFFFF` and about 6% black in Light) and show no shading on a plain page. `SolidBackgroundFillColorSecondaryBrush` (`#EEEEEE` Light / `#1C1C1C` Dark) and `ControlStrokeColorSecondaryBrush` (`#29000000` / `#18FFFFFF`) are opaque and visible. Check hex/alpha in the theme dictionary, not the resource name.
 - **The row that bounds the boxed `ListView` must be `Height="*"`, not `Auto`**, all the way up to where the page has room. With `Auto` the `ListView` grows to show every row and, on a page with no `ScrollViewer`, pushes the pagination bar off the bottom without any error.
 
 ## Paging bar

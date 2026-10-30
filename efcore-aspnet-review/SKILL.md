@@ -63,7 +63,7 @@ Fixes that leave the database alone: an enum view of an id becomes `[NotMapped] 
 | Route constants that no longer match the registered route (`"/restricts"` vs `/restrictleaves`) | Keep them equal | Wrong `Location` values and stale `.http` files |
 | A repository `GetByIdAsync` that **throws** `InvalidOperationException` when nothing is found | Return `T?` (`FindAsync`); after changing a return type, callers that assumed non-null need `?? throw` | The handler's `row != null ? Ok : NotFound` is dead code: 500 instead of 404 |
 | `PUT /x/{id}` handlers that never check the id | `if (body.Id != id) return BadRequest();` and `if (!await repo.ExistsAsync(id)) return NotFound();`. Implement `ExistsAsync` as `_dbSet.AsNoTracking().AnyAsync(e => EF.Property<int>(e, keyName) == id)` with `keyName` from `Model.FindEntityType(typeof(T)).FindPrimaryKey().Properties[0].Name` | A tracked lookup would clash with the incoming instance when the handler sets `Entry(row).State = Modified` |
-| `bool success = await repo.AddAsync(x); if (success) Created else NoContent` where `AddAsync` always returns true | Remove the dead branch (keep the check only where the repo really returns false, such as a duplicate-name check) | The `NoContent` branch can never run |
+| `bool success = await repo.AddAsync(x); if (success) Created else NoContent` where `AddAsync` always returns true | Remove the dead branch (keep the check only where the repo returns false, such as a duplicate-name check) | The `NoContent` branch can never run |
 | A delete helper calling `.Result` | `await` it | It blocks a request thread: with 180 concurrent requests that each wait 200 ms, `.Result` took 4,174 ms and `await` 230 ms (16 pool threads) |
 | `GetAllOrderByDescending(Expression<Func<T, DateTime>>)` on a nullable date | Use it only with a non-nullable `DateTime` | It accepts only a non-nullable `DateTime` |
 
@@ -95,7 +95,7 @@ A plain `SELECT ...` string can still be composed over.
 
 ## A paged list endpoint: how to build and test it
 
-- **One helper for every list**: `rows.ToResultAsync(query, sortMap, defaultSort, key, search, toDto)`. A `SortMap<T>` of name to `OrderBy` expression is the whitelist (never build a column name into an expression); the key is always the last `ThenBy` so pages never overlap; read the page `AsNoTracking()`; `Count` comes from the filtered query before `Skip/Take`; the answer carries the page size actually used. No page parameter keeps the plain-array answer so existing callers do not break.
+- **One helper for every list**: `rows.ToResultAsync(query, sortMap, defaultSort, key, search, toDto)`. A `SortMap<T>` of name to `OrderBy` expression is the whitelist (never build a column name into an expression); the key is always the last `ThenBy` so pages never overlap; read the page `AsNoTracking()`; `Count` comes from the filtered query before `Skip/Take`; the answer carries the page size used. No page parameter keeps the plain-array answer so existing callers do not break.
 - **Validate before the database does:** page index below 0, page size below 1, an unknown sort name or direction are 400 problem responses (the sort message lists the usable names); cap the page size; compute `(pageNumber - 1) * pageSize` in `long` before it reaches a 32 bit `OFFSET`.
 - **Test the helper without HTTP on in-memory SQLite** (`SqliteConnection("DataSource=:memory:")`, `EnsureCreated`): seed rows with ties in the sort column and assert pages hold the size, no key is on two pages, descending reverses, search narrows rows and count, the cap, a bad page. `TypedResults.Ok(x)` is `Ok<T>` with a `Value` property and `Results.Problem(...)` has `StatusCode` and `ProblemDetails`: read them by reflection, no `DefaultHttpContext`.
 - **SQLite is not SQL Server:** `string.Contains` is case-sensitive on SQLite (`instr`) and case-insensitive under SQL Server's default collation (use the same case in the test and say why); its foreign keys are enforced, so seed parents first. A required foreign key deletes its children by default (cascade), so a test of "delete a row that is in use" needs `OnDelete(DeleteBehavior.Restrict)` on the relationship, or the delete just succeeds.
@@ -113,39 +113,7 @@ A plain `SELECT ...` string can still be composed over.
 
 ## How this was verified
 
-- Written from CodeGenNew work on entities, repositories and API classes (commits 2026-09 to 2026-10).
-- Re-checked on 2026-10-29 against SQL Server 2022 `tempdb` with EF Core 10.0.13, using scratch tables that were dropped afterwards:
-  - An enum-typed property mapped next to its `...Id` int fails every query with `Invalid column name 'ResponseType'` when the table has no such column. The `[NotMapped]` getter-only view and `HasColumnName("Note")` for a renamed column both fix it.
-  - A non-nullable C# property over a column that holds NULL fails the read with "Data is Null" (the mechanism behind the `HasPrincipalKey` note; `HasPrincipalKey` itself was not tried).
-  - `required` on a property makes `System.Text.Json` refuse a body that omits it (`missing required properties including: 'Name'`).
-  - `SqlQueryRaw<int>("EXEC ...").SingleAsync()` throws "non-composable SQL" and `ToListAsync()` then `Single()` works.
-  - `var parameters = new[] { };` is compiler error CS0826; `new string[] { }` builds.
-- The repository and endpoint defects, reproduced the same day in a small in-process minimal API on in-memory SQLite (EF Core 10.0.12), defective and fixed versions side by side:
-  - `GetByIdAsync` built on `SingleAsync` answers **500** for a missing id; the same endpoint on `FindAsync` answers **404**.
-  - A `PUT /things/1` with a body that has `Id` 2 and no id check answers 200 and silently changes row 2; with the check it answers 400. A `PUT` for a missing row with no exists check answers 500 (a concurrency exception); with the check, 404.
-  - An exists check that loads the row with a tracked `FindAsync` and then sets `Entry(body).State = Modified` answers 500 (another instance with the same key is already tracked); the `AsNoTracking().AnyAsync(...)` version answers 204.
-  - `protected static readonly string? _apiSubDir;` that is never assigned gives compiler warning `CS0649` and builds `Location` as `/api/5`.
-- The paged-list helper and the generic CRUD base, written from the descriptions in this skill and run in an in-process minimal API on in-memory SQLite (EF Core 10.0.12, Swashbuckle 10.2.3), 25 employee rows with ties in the sort column:
-  - No page parameters answered a plain array of 25. Pages of 10 held 10, 10 and 5 rows and no id appeared on two pages even when sorting by the tied column (the key as last `ThenBy`); descending reversed the order; the count came from the filtered query; `pageSize=5000` was cut to 1000 and the answer said so.
-  - `pageNumber=0`, `pageSize=0`, an unknown sort (the message listed the usable names), an unknown direction, and `pageNumber=2000000000&pageSize=1000` (the product computed in `long`) all answered 400.
-  - `string.Contains` search was case-sensitive on SQLite: "Alpha" matched 5 rows and "alpha" 0.
-  - Called without HTTP, `Results.Ok(x)` is an `Ok<T>` with a `Value` property and `Results.Problem(...)` is a `ProblemHttpResult` with `StatusCode` (400) and `ProblemDetails`, as the skill says.
-  - The base answered 201 with `Location: /api/employees/26`, 422 for a duplicate name, 400 for an id mismatch, 404 for an unknown id on GET, PUT and DELETE, and 204 for a good PUT. With `Restrict`, deleting a parent that has a child answered 400 and inserting a child of a missing parent was refused (SQLite enforces foreign keys).
-  - A literal `/lookup` beat `/{name}` even though `/{name}` was registered first, and `/{id:int}` and `/{name}` coexisted (`/7` by id, `/Alpha5` by name).
-  - `swagger.json` answered 200 and every operation created with `WithName` had a unique `operationId`; two endpoints with the same `WithName` made both the endpoint and `swagger.json` answer 500.
-  - `AddAsync` returning `true` always: 6 of 6 posts answered 201, so the `NoContent` branch never ran.
-- The model-dump harness, built as the skill describes (a library with entities and a context on EF Core, a throwaway console project with the provider package, a placeholder connection string; 2 entities, an enum, a `required` member, an overridden `ToString`):
-  - The dump printed the public surface (`required Note [NotNull]`, `Closed [Nullable]`, enum members with values, whether `ToString` is overridden), the EF model from `IDesignTimeModel` and a `table|column` list; building the model never connected.
-  - After changing a nullable `Note` into a `required` one and adding a nullable `Closed`, `diff` showed exactly those: `String Note [Nullable]` became `required String Note [NotNull]`, the model line gained `Required`, and a new `Closed (DateTime?)` property and `E_Sheet|Closed` column appeared.
-  - Version rules: aligned versions worked on EF Core 9.0.16 and 10.0.13; a provider with an older patch of the same major worked (9.0.10 with 9.0.16, 10.0.0 with 10.0.13); a provider with a newer major than the project's EF Core also worked (NuGet raised the core package); a provider with an older major failed (8.0.11 with core 9.0.16: `TypeLoadException`; 9.0.16 with core 10.0.13: `MissingMethodException`).
-- `GetAllOrderByDescending(Expression<Func<T, DateTime>>)` called with a `DateTime?` lambda does not compile (`CS0266` and `CS1662`); the non-nullable lambda does.
-- The other base-class hooks, run in a second minimal API on SQLite:
-  - `AuthorizeAsync` plus an owner-scoped layer: a user listed only their own rows and the admin all 4; reading, changing or deleting another user's row answered 403; no user answered 401; a create stored the caller as the owner; a refusal from `PrepareUpdateAsync` answered 422.
-  - `OutputAsync` and `ListOutputAsync` gave a detail answer with the lines and a list answer without them. An overridden `CreateAsync` saved an order and its lines in one `SaveChanges`: a bad second line (a check constraint) answered 400 and left 1 order and 2 lines from the earlier good post.
-  - Two repositories with the same method names and different return types worked behind a `CrudStore<T>` of delegates with two `CrudStore.For(...)` overloads.
-  - `PaginatedItems<T> where T : class` used with an unconstrained `TOutput` is `CS0452`; an abstract `ToOutput` forces a class that builds its output elsewhere to implement it (`CS0534`), while a virtual one that throws does not.
-- Moved here from the `mssql` skill, with the evidence it had: against SQL Server 2022 `tempdb` with EF Core 10.0.13, the provider swap to InMemory fails with two registered providers when only `DbContextOptions<TContext>` is removed and works when `IDbContextOptionsConfiguration<TContext>` is removed too; `catch ... when (await ...)` is compiler error CS7094. The duplicate-row race pattern was not re-run.
-- Not re-run: `ReadAsync` returning a differently shaped entity for every route, and the layer that scopes by employee id in a real schema.
+Tested on this machine. The evidence, the versions used and the items **not re-run** are in [reference/verification.md](reference/verification.md): read it before saying a claim here was tested, and treat anything listed there as not re-run as unverified.
 
 ## What this does not prove
 

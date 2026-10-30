@@ -79,7 +79,7 @@ action/behavior-related types.
 
 ## Real signature mismatches (not just cosmetic)
 
-Occasionally the decompiled call site is simply wrong, not just malformed — e.g. a `ref` argument
+Occasionally the decompiled call site is wrong, not just malformed — e.g. a `ref` argument
 where the compiler demands `out` (`CS1620`). When a fix from this list doesn't apply, decompile the
 real interface/method with `-t` and check its actual parameter modifiers rather than assuming the
 original call site was correct.

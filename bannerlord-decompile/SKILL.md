@@ -16,7 +16,7 @@ If the user already has the ILSpy GUI app installed, install the matching versio
 
 ## Decompiling
 
-Full compilable project (one `.cs` file per type) — the default for actually recompiling:
+Full compilable project (one `.cs` file per type) — the default for recompiling:
 
 ```bash
 ilspycmd "<dll>" -o "<outdir>" -p
@@ -33,7 +33,7 @@ ilspycmd "<dll>" --dump-table AssemblyRef           # every assembly + version t
 
 `-l c,i,s,d,e` (list classes/interfaces/structs/delegates/enums) is faster to type but gave
 false negatives in practice — when a `-l` search comes up empty and you need to be sure a type
-really doesn't exist, confirm with `--dump-table TypeDef` before concluding anything (e.g. before
+doesn't exist, confirm with `--dump-table TypeDef` before concluding anything (e.g. before
 telling the user an API "doesn't exist in this game version").
 
 ## Getting a decompiled Bannerlord project to compile again

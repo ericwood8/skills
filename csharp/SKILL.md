@@ -38,7 +38,7 @@ Property patterns (`is { Prop: condition, ... }`) are usually the clearest optio
 
 ## Object construction: `required`/`init` over mutable setters
 
-When a type has properties that must be set at construction and shouldn't change afterward, use `required` + `init` instead of a mutable auto-property or a constructor overload juggling optional parameters — the compiler then enforces that every required value is actually supplied, and the object can't drift out of a valid state after creation:
+When a type has properties that must be set at construction and shouldn't change afterward, use `required` + `init` instead of a mutable auto-property or a constructor overload juggling optional parameters — the compiler then enforces that every required value is supplied, and the object can't drift out of a valid state after creation:
 
 ```csharp
 public class User

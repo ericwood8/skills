@@ -64,7 +64,7 @@ the actual generated file (`dotnet build MyProject.slnx`), not assume `.sln`.
 
 ## Quick diagnostic commands worth reaching for
 
-- **Inspect resolved items without a full build**, to check whether an `Include=` glob is actually
+- **Inspect resolved items without a full build**, to check whether an `Include=` glob is
   matching what you think it is (item evaluation, before any target runs):
   ```
   dotnet build MyProject.csproj -getItem:EmbeddedResource
@@ -76,7 +76,7 @@ the actual generated file (`dotnet build MyProject.slnx`), not assume `.sln`.
   ```
   dotnet build -v diag 2>&1 | grep "SomeFile.ext"
   ```
-  This is slow (diagnostic verbosity is very chatty) but is the most reliable way to find *where in the
+  This is slow (diagnostic verbosity is chatty) but is the most reliable way to find *where in the
   pipeline* a file silently stopped being what you expected, rather than guessing from the `.csproj` alone.
 
 
@@ -97,8 +97,8 @@ output instead and fails with `MSB3021`/`MSB3027`; close it first.)
 
 ## How this was verified
 
-- Written from build failures met while building CodeGenNew (first commit 2026-09-17, last change 2026-10-03).
-- Re-checked on 2026-10-29 with the .NET SDK 10.0.401, in a throwaway project: `--` in a `.csproj` comment fails with `MSB4025` (reproduced); a file `SP_Insert.tt.config` is given the culture `tt` and a `tt` satellite output folder appears, and `WithCulture="false"` removes both (reproduced, clean build before and after); `dotnet new sln` creates a `.slnx`.
+- Written from build failures met while building CodeGenNew.
+- Re-checked with the .NET SDK 10.0.401, in a throwaway project: `--` in a `.csproj` comment fails with `MSB4025` (reproduced); a file `SP_Insert.tt.config` is given the culture `tt` and a `tt` satellite output folder appears, and `WithCulture="false"` removes both (reproduced, clean build before and after); `dotnet new sln` creates a `.slnx`.
 - Not re-run: stale `obj` after code generation, the output folder difference between solution and project builds, packing a tool. The `WindowsAppSDKSelfContained` and `UseWindowsForms` items are kept in the `winui3` skill. The Windows App SDK version was not recorded.
 
 ## What this does not prove

@@ -20,7 +20,7 @@ Training data goes stale, especially for fast-moving surfaces like .NET, MSBuild
 - Confirming something changed between versions (e.g. .NET 8 → .NET 10, an MSBuild SDK bump)
 - Anything where being wrong would waste a build/test cycle rather than just being imprecise in conversation
 
-Skip this for things you're confident about from well-established, stable APIs (e.g. basic C# syntax) — the point is to catch drift on things that actually change, not to look up everything.
+Skip this for things you're confident about from well-established, stable APIs (e.g. basic C# syntax) — the point is to catch drift on things that change, not to look up everything.
 
 ## Query effectiveness
 

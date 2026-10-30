@@ -107,7 +107,7 @@ end;
 
 ## How this was verified
 
-- The tables marked "(RTL)" were read in the shipped Delphi 12 Athens source on 2026-10-29 (`System.Types`, `System.SysUtils`, `System.Classes`).
+- The tables marked "(RTL)" were read in the shipped Delphi 12 Athens source (`System.Types`, `System.SysUtils`, `System.Classes`).
 - Everything else is the standard language rules written from memory. It was **not compiled**: the only compiler here is the Community edition, which blocks command-line use. Treat a statement as unverified until the user's IDE accepts it, and say so.
 
 ## What this does not prove

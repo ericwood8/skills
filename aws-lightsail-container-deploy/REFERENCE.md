@@ -1,6 +1,6 @@
 # AWS Lightsail Container Service — Gotcha Reference
 
-Each entry: the symptom as actually seen, why it happens, and the fix. All verified firsthand (Critical Viewer project, a 3-container .NET/React app: nginx proxy + ASP.NET backend + React frontend on Lightsail Container Service, `nano` power, `us-east-2`).
+Each entry: the symptom as seen, why it happens, and the fix. All verified firsthand (Critical Viewer project, a 3-container .NET/React app: nginx proxy + ASP.NET backend + React frontend on Lightsail Container Service, `nano` power, `us-east-2`).
 
 ## 1. Container naming — underscores are rejected
 
@@ -10,7 +10,7 @@ An error occurred (InvalidInputException) when calling the CreateContainerServic
 Container name "backend_api" does not match pattern: ^(?:[a-z0-9]{1,2}|[a-z0-9][a-z0-9-]+[a-z0-9])$
 ```
 
-**Cause:** Lightsail container names allow lowercase alphanumerics and hyphens only — no underscores, unlike a lot of Docker-world naming conventions.
+**Cause:** Lightsail container names allow lowercase alphanumerics and hyphens only — no underscores, unlike many Docker naming conventions.
 
 **Fix:** Use hyphens everywhere a container is named — `backend-api`, `frontend-ui`, not `backend_api`/`frontend_ui`. Keep this consistent with `containers.json` keys and any Dockerfile/compose service names you want to visually match.
 
@@ -130,7 +130,7 @@ Expect `ACTIVATING` to persist for several minutes — that's normal, not stuck.
 aws lightsail get-container-log --service-name <service> --container-name <name> --query "logEvents[-20:]"
 ```
 
-**Signatures actually seen and what they meant:**
+**Signatures seen and what they meant:**
 - `"[deployment:4] Took too long"` in the app container's own logs — the app didn't bind/respond inside the health-check window in time. This is an app-level startup problem (e.g. slow migrations, misconfigured connection string causing a hang), not a Lightsail platform issue.
 - `"<name> could not be resolved (3: Host not found)"` in the proxy's logs, paired with `502` responses — the pod-networking issue from item 4 (proxy using a container name instead of `localhost`).
 
