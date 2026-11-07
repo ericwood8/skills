@@ -15,6 +15,7 @@ The usual order: scratch database, run the stack, drive the screens, read the da
 |---|---|
 | Make, use or drop a disposable database (SQL Server, PostgreSQL, MySQL, Docker) | [scratch-database](reference/scratch-database.md) |
 | Start or stop the API and front end, or build a sample that never compiled a template | [run-the-stack](reference/run-the-stack.md) |
+| Play the generated API tests (ASP.NET, Python, Rust) over a live SQL Server, PostgreSQL or MySQL with no Docker | [live-database-tests](reference/live-database-tests.md) |
 | Click through a React, Angular or Blazor page in the browser pane | [drive-web-page](reference/drive-web-page.md) |
 | Decide what a screen test must cover, or check a changed form field, caption or mark | [screen-checklist](reference/screen-checklist.md) |
 | Click through a WinUI3 app against a scratch database (the UI Automation techniques are in the `winui3` skill) | [desktop-winui3](reference/desktop-winui3.md) |
