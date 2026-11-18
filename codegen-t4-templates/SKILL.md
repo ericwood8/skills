@@ -37,7 +37,8 @@ This file is the short core. Find your task in the table, read that one file in 
 5. **Essentials are written once and kept.** Do not change what an essentials file must contain to make a page template work; put the new UI in the page template ([essentials-and-bases](reference/essentials-and-bases.md)).
 6. **Keep default output unchanged** when a setting is off, and prove it with a diff against the last commit. Optional extras default off and are tested in both states.
 7. **Prove with the real tool**, not only the template tests: build the generated code, run the API, click through the screen. A green unit test of template text misses real defects ([regenerate-and-prove](reference/regenerate-and-prove.md), and the `verify-in-running-app` skill).
-8. **Report what you could not generate or prove** (columns left out, files kept hand-maintained, a stack with no sample) instead of hiding it.
+8. **A test of generated text must not depend on line endings.** The Windows CI runner checks templates out as CRLF, so generated text holds `\r\n` and a `Contains` with `"\n"` passes here and fails there: `.Replace("\r\n", "\n")` the text first. Run `Docs/Verification/Tools/crlf_test_run.py` (the suite on a CRLF copy) before a push that adds such a test.
+9. **Report what you could not generate or prove** (columns left out, files kept hand-maintained, a stack with no sample) instead of hiding it.
 
 ## Related skills
 
