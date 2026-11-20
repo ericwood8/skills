@@ -19,3 +19,13 @@ Read this when: you click through a React, Angular or Blazor page with the brows
 ## Blazor in the browser pane
 
 - **Blazor in the browser pane:** set a value with the native setter and dispatch `input` and `change` (an `InputSelect` and `InputNumber` bind on `change`), click with `.click()`, wait about a second, then read the rows back from the SQLite file with Python.
+
+## Uno (browser head) in the accessibility tree
+
+Playwright drives the Uno WebAssembly head through its accessibility ("semantics") tree, not the DOM of the controls. With Uno.Sdk 7 and net11.0-browserwasm:
+
+- Dialog tabs are `role="option"`, not `tab`, and are 0 x 0 pixels: wait for them with `state="attached"`, not visible.
+- A grid row is one `role="option"` labelled by the row object's `ToString()`; its cells and Edit, Clone and Delete buttons are not exposed. Give the row class a `ToString()` that joins the shown cells (the generated list and child-grid rows do) and reach a row's buttons by focusing the row and pressing Tab.
+- A deleted row's element lingers after the grid is empty: prove a delete with the paging bar's "Nothing found.", not with the row's absence.
+- `main` tags are `[role="main"]` here.
+- When a CI walk fails but the local one passes, run the same command as the workflow (`Test-FrontEndPages.py --stack uno --build-cli`, and again with `--schema owner_scoped`) from a clean checkout state; the owner-scoped schema has no tenant table.

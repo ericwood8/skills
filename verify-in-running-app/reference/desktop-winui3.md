@@ -8,3 +8,7 @@ The UI Automation techniques, the control and dialog traps (ComboBox, TabItem, T
 - Read a cell after a formatting change (the `CurrencyFormatter` detail is in the `winui3` skill, `reference/controls.md`).
 - A WinUI3 app reads `appsettings.json` from `bin`: edit that copy to point at the scratch database and put it back in `finally`.
 - Add a test that parses generated XAML as XML (`XDocument.Parse`) when a template has never been built in a sample.
+
+## Uno Skia window on a scaled 4K screen
+
+An Uno Skia/Win32 window can draw its content in a small fixed region of a larger window on a 150% scaled 4K machine. That is the renderer, not a template fault: report it, do not chase it in the templates. `screenshot.ps1` (saved tools) shows the whole virtual screen so you can see it; `Get-Process` plus UI Automation `RootElement.FindAll` lists the app's windows with their rectangles.
