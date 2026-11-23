@@ -21,6 +21,7 @@ edit here is live at once and nothing is copied.
 | [self-contained-deployment](self-contained-deployment) | Copy-and-go C# desktop/CLI deployment philosophy — no installer, auto-seeded config, embedded assets |
 | [codegen-t4-templates](codegen-t4-templates) | Writing/verifying T4 (Mono.TextTemplating) code-generator templates that reproduce hand-written files |
 | [odata-generated-grids](odata-generated-grids) | CodeGenNew OData/REST grids in React, Angular and Blazor: `$select` from chosen columns, dropping sorts and filters with a hidden column, owner scope, and how to prove a grid change live |
+| [dotnet-major-upgrade](dotnet-major-upgrade) | Moving an ASP.NET, EF Core and Aspire solution to a new .NET major: the order of steps, Aspire 9 to 17 (AppHost SDK, AddJavaScriptApp script name), Swashbuckle 11 and OpenApi 3 security schemes, MSTest 4 runner |
 | [efcore-aspnet-review](efcore-aspnet-review) | Known defect patterns in EF Core entities and ASP.NET minimal-API CRUD endpoints |
 | [bannerlord-decompile](bannerlord-decompile) | Decompiling DLLs with ILSpy and getting the result recompiling |
 | [mstest-assertions](mstest-assertions) | Fixing MSTEST0037 by using the specific MSTest assertion (`Assert.Contains`, `HasCount`, `IsLessThan`), expected value first |
@@ -41,6 +42,7 @@ edit here is live at once and nothing is copied.
 | Skill | What it covers |
 | --- | --- |
 | [angular-crud-gotchas](angular-crud-gotchas) | Angular (standalone components, Material, ng test/build) bugs in a CRUD screen talking to an ASP.NET API |
+| [angular-major-upgrade](angular-major-upgrade) | Upgrading an Angular app several majors with ng update one step at a time, a library that breaks on a removed API (ngx-toastr and the peer overrides), moving to @angular/build, the bundle budget |
 | [react-crud-gotchas](react-crud-gotchas) | React (Vite, react-router) bugs in a generated CRUD screen app: form under a long grid, hidden-tab validation, clearing a date, child-row navigation |
 
 ### Databases
