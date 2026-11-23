@@ -1,6 +1,6 @@
 ---
 name: docker
-description: Use when working with a Dockerfile or docker-compose.yml, or diagnosing a Docker build or runtime problem, especially on a Windows host running Linux containers. Trigger words - Docker Desktop will not start, stale socket, dependency rebuild, UTF-8 BOM, node_modules bind mount, docker from Git Bash, borrow a container's client.
+description: Use when working with a Dockerfile or docker-compose.yml, or diagnosing a Docker build or runtime problem, especially on a Windows host running Linux containers. Trigger words - Docker Desktop will not start, stale socket, engine not running, dependency rebuild, UTF-8 BOM, node_modules bind mount, docker from Git Bash, borrow a container's client, .dockerignore, nested obj folder, fallback package folder.
 ---
 
 # Docker
@@ -51,8 +51,18 @@ A handful of gotchas from real Docker/Compose friction on a Windows-host + Linux
 - Docker Desktop's engine has stopped by itself in the middle of a long session once (not reproduced): run the checks that need a throwaway container in one sitting and confirm `docker ps` before relying on it.
 - Windows reserves port ranges (`netsh interface ipv4 show excludedportrange protocol=tcp`); a port in one fails with "forbidden by its access permissions". Use ports above 18000 for throwaway tests.
 - `docker pull` and a started Docker Desktop are downloads/starts the user should know about; say which image and roughly how big before pulling.
+- Is the engine up? `python C:/Github/tools/docker_ready.py` (exit 0 up, 1 down). `--start` starts Docker Desktop and waits for the engine (about 45 s here); say so first. A started Docker Desktop is not an answering engine, so do not trust the window: `docker info` is the probe.
+- `docker compose build --pull <service>` re-checks the base image tags (`sdk:11.0`, `aspnet:11.0`) for a newer patch; without `--pull` a cached base is used. An all-cached build reports the image as created minutes ago, which is correct.
 - Retag an image under a local name for a registry push with a plain `docker tag <image>:<version> <local-name>:local`; no rebuild (for example `mcr.microsoft.com/mssql/server`).
 - For nginx configs see the `nginx-config-testing` skill.
+
+## 7. `.dockerignore` `obj/` does not match a nested `obj` folder
+
+**Symptom:** `dotnet publish --no-restore` inside the image fails with `Unable to find fallback package folder 'C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages'` (a Windows path in a Linux build, error MSB4018 in `ResolvePackageAssets`). A clean checkout, such as CI, builds fine; a machine where the project was also built on the host fails.
+
+**Cause:** `.dockerignore` patterns are matched from the build-context root, unlike `.gitignore`. `obj/` ignores only `./obj`, not `src/Api/obj`, so `COPY src/ src/` brings the host's `project.assets.json` (Windows paths) over the restore the image just did.
+
+**Fix:** `**/bin/` and `**/obj/` (and `**/node_modules/` for a Node context). Rebuild and the error is gone.
 
 ## How this was verified
 

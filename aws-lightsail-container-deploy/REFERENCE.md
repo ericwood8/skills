@@ -143,3 +143,13 @@ Lightsail Container Service at this scale (a handful of containers, `nano`/`micr
 There's no first-class secrets-manager integration for container environment variables at this tier — DB passwords, signing keys, etc. go in as plain env var values inside `containers.json`. Treat that file as sensitive:
 - Gitignore the real `containers.json`.
 - Keep a redacted `containers.json.example` checked in (same shape, placeholder values) so the structure is documented without leaking secrets.
+
+## 11. `push-container-image` says the lightsailctl plugin was not found
+
+**Symptom:** `aws lightsail push-container-image ...` exits at once with `aws: [ERROR]: The Lightsail Control (lightsailctl) plugin was not found.` Nothing was pushed; reads such as `get-container-services` still work.
+
+**Cause:** the push is done by a separate binary, `lightsailctl`, that the AWS CLI looks for on PATH. On the machine where this was met, PATH named `C:\Temp\lightsailctl`, but the folder no longer existed (a cleanup of `C:\Temp`), so `which lightsailctl` found nothing and the stale entry hid the cause.
+
+**Fix:** download it from AWS (Windows: `https://s3.us-west-2.amazonaws.com/lightsailctl/latest/windows-amd64/lightsailctl.exe`, 10,264,064 bytes on 2026-11-23, v1.0.8; the install page is `https://lightsail.aws.amazon.com/ls/docs/en_us/articles/amazon-lightsail-install-software`), put it in a folder on PATH and confirm with `lightsailctl --version`. A download is something to ask the user about first: say the file name, the source and the size. The Windows binary is not Authenticode-signed (`Get-AuthenticodeSignature` says NotSigned), so compare the size with the `Content-Length` of a `curl -I` on that URL. A shell started before the folder was created needs `export PATH="$PATH:/c/Temp/lightsailctl"` or a new window.
+
+`tools/deploy/lightsail/lightsail_deploy.py push` checks for the plugin before it builds, and names a PATH entry whose folder is gone.

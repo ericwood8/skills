@@ -1,6 +1,6 @@
 ---
 name: aws-lightsail-container-deploy
-description: Use when running `aws lightsail` container-service commands, deploying or redeploying a multi-container app to Lightsail, editing a Lightsail containers.json or public-endpoint.json, or debugging a Lightsail container-service error. Trigger words - create-container-service-deployment, container name rejected, image version, pod networking, deployment stuck, Lightsail logs.
+description: Use when running `aws lightsail` container-service commands, deploying or redeploying a multi-container app to Lightsail, editing a Lightsail containers.json or public-endpoint.json, or debugging a Lightsail container-service error. Trigger words - create-container-service-deployment, container name rejected, image version, pod networking, deployment stuck, Lightsail logs, lightsailctl plugin was not found, push-container-image fails.
 ---
 
 # AWS Lightsail Container Service Deploy
@@ -43,6 +43,7 @@ aws lightsail get-container-log --service-name <service> --container-name <name>
 7. **Two different `state` fields**: the container *service's* state (`RUNNING` while it serves a deployment, seen live) vs. an individual *deployment's* state (`ACTIVATING` → `ACTIVE`/`FAILED`, superseded ones go `INACTIVE`). A `RUNNING` service says nothing about the new deployment, so poll the deployment. `ACTIVATING` can legitimately sit for several minutes.
 8. **No IaC path fits this well** — it's CLI-managed (`push-container-image` + `create-container-service-deployment`), not Terraform/CloudFormation-first for a small service like this.
 9. **Secrets live in plain env vars inside `containers.json`** — there's no secrets-manager integration at this tier. Gitignore the real file; keep a redacted `.example` sibling checked in for shape.
+10. **`push-container-image` needs the `lightsailctl` plugin on PATH**, not just the AWS CLI; without it the push stops at once with "The Lightsail Control (lightsailctl) plugin was not found". The plugin is a separate download (about 10 MB, from AWS), so ask first; see REFERENCE.md section 11.
 
 In the Critical Viewer repo the whole sequence is scripted: `python tools/deploy/lightsail/lightsail_deploy.py status | push | deploy | logs` (checks the rules above, picks the highest numeric image version, polls the deployment state, prints redacted logs on failure; run `deploy --dry-run` first).
 
